@@ -636,4 +636,4 @@ if __name__ == "__main__":
         use_kwargs=False,
     )
     install(plugin)
-    run(host="localhost", port=8080, reloader=True, debug=True)
+    run(host=config["signalservergui"]["address"], port=int(config["signalservergui"]["port"]), reloader=True, debug=True)
