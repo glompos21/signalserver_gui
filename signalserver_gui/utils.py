@@ -240,6 +240,10 @@ def generate(config: configparser.ConfigParser, item: Plot) -> str:
     else:
         make_kmz(item, file_base, dimensions, config["convert"]["output_type"])
 
+    # Convert kmz to geotiff if path for converter specified
+    if config["signalserver"]["kmz_conv_path"]:
+        run(config["signalserver"]["kmz_conv_path"], f"{file_base}.kmz")
+
     with ZipFile(quote(f"{file_base}.zip"), "w") as zip:
         for filename in glob.glob(f"{item_path}/*"):
             if "zip" not in filename:

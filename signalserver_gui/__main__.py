@@ -617,6 +617,10 @@ if __name__ == "__main__":
                 config["signalserver"]["color_profile"] = os.path.join(
                     config["signalserver"]["color_profiles_dir"], "rainbow.dcf"
                 )
+
+            if "kmz_conv_path" not in config["signalserver"]:
+                config["signalserver"]["kmz_conv_path"] = None
+
         except Exception as e:
             print(
                 "Invalid config.ini, Missing mandatory settings. Exiting...",
