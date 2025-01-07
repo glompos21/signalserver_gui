@@ -45,6 +45,7 @@ def which(program):
 def run(cmd: str, args: list = []) -> str:
     """Execute a command using an external tool."""
     print("Running:", " ".join([cmd, *args]))
+
     try:
         app_path = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
         result = subprocess.run(
@@ -54,6 +55,7 @@ def run(cmd: str, args: list = []) -> str:
             stderr=subprocess.STDOUT,
             check=True,
         )
+        print(result.stdout)
         return result.stdout.decode("utf-8")
     except Exception as e:
         return str(e)
@@ -251,7 +253,7 @@ def generate(config: configparser.ConfigParser, item: Plot) -> str:
 
     # Convert kmz to geotiff if path for converter specified
     if config["signalserver"]["kmz_conv_path"]:
-        run(config["signalserver"]["kmz_conv_path"], f"{file_base}.kmz")
+        run(config["signalserver"]["kmz_conv_path"], [f"{file_base}.kmz"])
 
     with ZipFile(quote(f"{file_base}.zip"), "w") as zip:
         for filename in glob.glob(f"{item_path}/*"):
