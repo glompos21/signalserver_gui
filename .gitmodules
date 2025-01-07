@@ -1,0 +1,3 @@
+[submodule "Signal-Server"]
+	path = Signal-Server
+	url = https://github.com/glompos21/Signal-Server.git
