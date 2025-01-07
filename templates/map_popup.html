@@ -5,7 +5,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Map Popup</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link rel="stylesheet" href="/css/leaflet.css" />
+    <link rel="stylesheet" href="/css/leaflet.draw.css" />
+
     <style>
         #map {
             height: 100vh;
@@ -22,6 +24,8 @@
         }
     </style>
     <script src="/js/leaflet.js"></script>
+    <script src="/js/leaflet.draw.js"></script>
+
     <script src="/js/georaster.browser.bundle.min.js"></script>
     <script src="/js/georaster-layer-for-leaflet.min.js"></script>
     <script src="/js/chroma.min.js"></script>
@@ -72,21 +76,21 @@
                 parseGeoraster(arrayBuffer).then(georaster => {
                     console.log("georaster:", georaster);
                     var min = georaster.mins[0];
-                        var max = georaster.maxs[0];
-                        console.log("min:", min);
-                        console.log("max:", max);
-                        var scale = chroma.scale(['red', 'yellow', 'green']).domain([min, max]);
+                    var max = georaster.maxs[0];
+                    console.log("min:", min);
+                    console.log("max:", max);
+                    var scale = chroma.scale(['red', 'yellow', 'green']).domain([min, max]);
 
                     var layer = new GeoRasterLayer({
                         georaster: georaster,
                         opacity: 0.8,
                         pixelValuesToColorFn: values => {
-                                var value = values[0];
-                                if (value < min) {
-                                    return 'rgba(0, 0, 0, 0)'; // Transparent
-                                }
-                                return scale(value).hex();
+                            var value = values[0];
+                            if (value < min) {
+                                return 'rgba(0, 0, 0, 0)'; // Transparent
                             }
+                            return scale(value).hex();
+                        }
                     });
                     layer.addTo(map);
 
@@ -95,6 +99,33 @@
                 });
             });
 
+        // Add Leaflet Draw toolbar
+        var drawnItems = new L.FeatureGroup();
+        map.addLayer(drawnItems);
+
+        var drawControl = new L.Control.Draw({
+            edit: {
+                featureGroup: drawnItems
+            },
+            draw: {
+                polygon: true,
+                polyline: true,
+                rectangle: true,
+                circle: true,
+                marker: true
+            }
+        });
+        map.addControl(drawControl);
+        var polylineCount = 0;
+        var polygonCount = 0;
+        var rectangleCount = 0;
+        var circleCount = 0;
+        var markerCount = 0;
+        
+        map.on(L.Draw.Event.CREATED, function (event) {
+            var layer = event.layer;
+            drawnItems.addLayer(layer);
+        });
 
     </script>
 </body>
