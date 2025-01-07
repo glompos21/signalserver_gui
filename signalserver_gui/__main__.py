@@ -30,6 +30,8 @@ from bottle import (
     run,
     static_file,
 )
+from bottle_cors_plugin import cors_plugin
+
 from bottle.ext import sqlalchemy
 from sqlalchemy import create_engine, event, literal
 from sqlalchemy.orm import declarative_base, sessionmaker
@@ -544,6 +546,11 @@ def get_config():
     }
     return template("config.html", parts)
 
+@get("/map_popup")
+def map_popup():
+    """Render the map popup page."""
+    geotiff = request.query.geotiff
+    return template("map_popup.html", geotiff=geotiff)
 
 if __name__ == "__main__":
     if os.path.isfile("config.ini"):
@@ -640,4 +647,6 @@ if __name__ == "__main__":
         use_kwargs=False,
     )
     install(plugin)
+    install(cors_plugin('*'))
+
     run(host=config["signalservergui"]["address"], port=int(config["signalservergui"]["port"]), reloader=True, debug=True)
