@@ -102,3 +102,17 @@ $ cd signalserver_gui
 $ source .venv/bin/activate
     (No output)
 $ python -m db.test_init
+```
+
+# Docker
+
+The current app can be build into a docker image.
+run:
+
+```console
+docker compose build
+```
+
+```console
+docker compose up
+```
