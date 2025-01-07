@@ -1,0 +1,12 @@
+services:
+  web:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+      - ./downloads:/app/downloads
+      - ./config_docker.ini:/app/config.ini
+      - ./db/signalserver_gui.db:/app/db/signalserver_gui.db
+    # environment:
+    #   - NAME=World
