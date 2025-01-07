@@ -30,7 +30,6 @@ from bottle import (
     run,
     static_file,
 )
-from bottle_cors_plugin import cors_plugin
 
 from bottle.ext import sqlalchemy
 from sqlalchemy import create_engine, event, literal
@@ -288,6 +287,10 @@ def delete_item(item_type, id, db):
                         os.path.join("data/antennas", antenna_type, name + ".*")
                     ):
                         os.remove(f)
+                if item_type == "plot":
+                    for f in glob.glob(f"downloads/{id}/*"):
+                        os.remove(f)
+                    os.rmdir(f"downloads/{id}")
             except Exception as e:
                 messages.append(
                     {
@@ -647,6 +650,4 @@ if __name__ == "__main__":
         use_kwargs=False,
     )
     install(plugin)
-    install(cors_plugin('*'))
-
     run(host=config["signalservergui"]["address"], port=int(config["signalservergui"]["port"]), reloader=True, debug=True)
