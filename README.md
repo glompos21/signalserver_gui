@@ -8,23 +8,20 @@ Signal Server GUI is designed as a companion to Signal Server. Signal Server GUI
 Clone repository
 
 ```shell
-    $ git clone https://github.com/thetacom/signalserver_gui
+git clone https://github.com/glompos21/signalserver_gui.git
+git submodule update --init --recursive
 ```
 
-Install external dependencies
-
-- [Signal Server](https://github.com/Cloud-RF/Signal-Server)
-- [ImageMagick](https://github.com/ImageMagick/ImageMagick)
+Complile Signal-Server
+See [Signal-Server Readme.md](./Signal-Server/README.md#L61)
 
 Install python dependencies
 
 ```shell
-$ cd signalserver_gui
-    (No output)
-$ python -m venv .venv
-    (virtual environment creation output)
-$ pip install -rrequirements.txt
-    (pip installation output)
+cd signalserver_gui
+python -m venv .venv
+source .venv/bin/activate
+pip install -rrequirements.txt
 ```
 
 ### Configuration
@@ -75,11 +72,9 @@ output_type = png
 Starting Signal Server GUI:
 
 ```shell
-$ cd signalserver_gui
-    (No output)
-$ source .venv/bin/activate
-    (No output)
-$ python -m signalserver_gui
+cd signalserver_gui
+source .venv/bin/activate
+python -m signalserver_gui
     (Bottle server console log)...
     Listening on http://localhost:8080/
 ```
