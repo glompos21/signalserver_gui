@@ -216,6 +216,9 @@ def generate(config: configparser.ConfigParser, item: Plot) -> str:
     if "-lon" not in command_args:
         command_args.extend(["-lon","0.0"])
         print("!!! Warning !!!! -lon set to 0.0")
+    if "-lat" not in command_args:
+        command_args.extend(["-lat","0.0"])
+        print("!!! Warning !!!! -lat set to 0.0")
     [output,error] = run(command, command_args)
     print(f"output:{output}")
     print(f"error:{error}")
