@@ -1,6 +1,9 @@
 # Signal Server GUI
 
 Signal Server GUI is designed as a companion to Signal Server. Signal Server GUI provides a simple and intuitive interface to manage the many configuration options available within Signal Server. This web interface allows you to build and save three item types (Stations, Antennas, and Plots). As you develop plots you are afforded opportunity to manipulate some of the many parameters which can affect propagation. Reasonable default values are provided, which can be changed as you develop and refine your model.
+
+Glompos21: Added the ability to show the plot on top of a map and misc fix/updates
+
 ## Getting Started
 
 ### Installation
@@ -9,6 +12,7 @@ Clone repository
 
 ```shell
 git clone https://github.com/glompos21/signalserver_gui.git
+cd signalserver_gui
 git submodule update --init --recursive
 ```
 
@@ -22,6 +26,11 @@ cd signalserver_gui
 python -m venv .venv
 source .venv/bin/activate
 pip install -rrequirements.txt
+```
+
+Install kmzToGeoTiff.sh
+```shell
+sudo apt install gdal-bin
 ```
 
 ### Configuration
