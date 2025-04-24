@@ -55,10 +55,11 @@ def run(cmd: str, args: list = []) -> str:
             stderr=subprocess.STDOUT,
             check=True,
         )
-        print(result.stdout)
-        return result.stdout.decode("utf-8")
+
+        return [result.stdout.decode("utf-8"),""]
     except Exception as e:
-        return str(e)
+        print("Error running command:", e)
+        return ["",str(e)]
 
 
 def generate(config: configparser.ConfigParser, item: Plot) -> str:
@@ -211,7 +212,13 @@ def generate(config: configparser.ConfigParser, item: Plot) -> str:
         command = config["signalserver"]["path"]
     # Run signalserver command and capture output for use in kml.
     # ToDO [info] Loading topo data for boundaries: (35.278673N, 335.795442W) to (35.729327N, 336.346558W)
-    output = run(command, command_args)
+    # print(f"Command: {command} {command_args}")
+    if "-lon" not in command_args:
+        command_args.extend(["-lon","0.0"])
+        print("!!! Warning !!!! -lon set to 0.0")
+    [output,error] = run(command, command_args)
+    print(f"output:{output}")
+    print(f"error:{error}")
     output_list = output.split('\n')
     # Regular expression to extract numbers
     area_bountaries = next((line for line in output_list if "Area boundaries" in line), None)
