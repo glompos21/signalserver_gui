@@ -67,6 +67,12 @@ output_type = png
 - `convert` - Config section with convert settings
   - `path` - Specifies the path to the convert binary. Convert is included with the ImageMagick suite of tools.
   - `output_type` - Specifies the preferred image format for graphics. Recommend `png` to allow image transparency.
+### Elevation data
+The data needs to be download and placed on data/elevation
+More information on [Signal-Server Readme.md](./Signal-Server/README.md#L159).
+
+Another source of data is: [https://dwtkns.com/srtm30m/](https://dwtkns.com/srtm30m/)
+
 ### Usage
 
 Starting Signal Server GUI:
