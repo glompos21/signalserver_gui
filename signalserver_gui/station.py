@@ -37,7 +37,7 @@ class Station(Base):
         latitude=0.0,
         longitude=0.0,
         height=30,
-        geography="North Americal",
+        geography="North America",
         state="N/A",
         polarization="vertical",
         rotation=0.0,

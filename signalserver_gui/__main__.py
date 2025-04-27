@@ -401,6 +401,14 @@ def action_item(item_type, action, db, id=0):
                     "type": "danger",
                 }
             )
+        elif item_type == "station" and (request.forms.get("latitude")== "0.0" or request.forms.get("longitude")== "0.0"):
+            messages.append(
+                {
+                    "message": "Latitude and Longitude must be set.",
+                    "title": f"Item update failed.",
+                    "type": "danger",
+                }
+        )
         elif action == "new":
             try:
                 antenna_file = request.files.get("filename")
@@ -451,8 +459,10 @@ def action_item(item_type, action, db, id=0):
         else:
             try:
                 dirty_item = db.get(item_class, id)
+                # print(f"item of page:{item_class.__table__.columns}")
                 for col in item_class.__table__.columns:
                     value = request.forms.get(col.name)
+                    # print(f"{col}: {value}")
                     if item_type == "plot" and col.name == "name" and len(value) < 8:
                         messages.append(
                             {
@@ -462,6 +472,7 @@ def action_item(item_type, action, db, id=0):
                             }
                         )
                         break
+
                     if isinstance(col.type, Boolean):
                         if value != None:
                             setattr(dirty_item, col.name, True)
@@ -549,11 +560,13 @@ def get_config():
     }
     return template("config.html", parts)
 
+
 @get("/map_popup")
 def map_popup():
     """Render the map popup page."""
     geotiff = request.query.geotiff
     return template("map_popup.html", geotiff=geotiff)
+
 
 if __name__ == "__main__":
     if os.path.isfile("config.ini"):
@@ -650,4 +663,9 @@ if __name__ == "__main__":
         use_kwargs=False,
     )
     install(plugin)
-    run(host=config["signalservergui"]["address"], port=int(config["signalservergui"]["port"]), reloader=True, debug=True)
+    run(
+        host=config["signalservergui"]["address"],
+        port=int(config["signalservergui"]["port"]),
+        reloader=True,
+        debug=True,
+    )
