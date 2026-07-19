@@ -82,6 +82,53 @@ More information on [Signal-Server Readme.md](./Signal-Server/README.md#L159).
 
 Another source of data is: [https://dwtkns.com/srtm30m/](https://dwtkns.com/srtm30m/)
 
+#### Converting .hgt to .sdf files
+
+Signal Server requires elevation data in `.sdf` format. Raw SRTM data comes as `.hgt` files and must be converted using the `srtm2sdf` utilities included in `Signal-Server/utils/sdf/usgs2sdf/`.
+
+**Build the conversion tools first:**
+```shell
+cd Signal-Server/utils/sdf/usgs2sdf
+cmake .
+make
+```
+
+This produces two binaries:
+- `srtm2sdf` — converts 3-arc-second (90m) `.hgt` files to standard `.sdf` (use with `-res 1200` or lower)
+- `srtm2sdf-hd` — converts 1-arc-second (30m) `.hgt` files to HD `.sdf` (use with `-res 3600`)
+
+**Standard resolution (90m) — recommended for most use:**
+```shell
+cd data/elevation
+srtm2sdf -d /dev/null N35E023.hgt
+# produces: 35_36_337_338.sdf (naming uses western longitude convention)
+```
+
+**HD resolution (30m) — slower but finer detail:**
+```shell
+cd data/elevation
+srtm2sdf-hd -d /dev/null N35E023.hgt
+# produces: 35_36_337_338-hd.sdf
+```
+
+**Batch convert all .hgt files:**
+```shell
+cd data/elevation
+
+# Standard resolution
+for file in *.hgt; do srtm2sdf -d /dev/null "$file"; done
+
+# HD resolution
+for file in *.hgt; do srtm2sdf-hd -d /dev/null "$file"; done
+```
+
+**Compress to save disk space** (Signal Server reads `.bz2` and `.gz` natively):
+```shell
+bzip2 *.sdf
+```
+
+> **Note:** Resolution must match tile format. Standard `.sdf` tiles work with `-res 300/600/1200`. HD `-hd.sdf` tiles require `-res 3600`. Using mismatched resolution will result in "SDF file not found" warnings and flat (sea-level) terrain.
+
 ### Usage
 
 Starting Signal Server GUI:
