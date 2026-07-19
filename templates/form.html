@@ -28,6 +28,22 @@
 {% if type == "station" and action == "new"%}
 <button onclick="window.open('/map_popup', '_blank')">Open Map</button>
 {%endif%}
+{% if type == "plot" %}
+<div class="row g-3 mb-3">
+  <div class="col-auto">
+    <select id="preset-select" class="form-select">
+      <option value="">-- Load Preset --</option>
+    </select>
+  </div>
+  <div class="col-auto">
+    <button type="button" class="btn btn-outline-success" onclick="savePreset()">Save as Preset</button>
+  </div>
+  <div class="col-auto">
+    <button type="button" class="btn btn-outline-danger" onclick="deletePreset()">Delete Preset</button>
+  </div>
+</div>
+{% endif %}
+
 <form
   class="row g-3"
   method="post"
@@ -80,4 +96,124 @@
 {%for i in request.query.forms %}
   {{i}}
 {%endfor%}
+
+{% if type == "plot" %}
+<script>
+var presets = {};
+
+function loadPresetList() {
+  fetch('/api/presets')
+    .then(r => r.json())
+    .then(data => {
+      presets = data;
+      var sel = document.getElementById('preset-select');
+      // Keep first option, remove rest
+      while (sel.options.length > 1) sel.remove(1);
+      Object.keys(data).forEach(name => {
+        var opt = document.createElement('option');
+        opt.value = name;
+        opt.text = name;
+        sel.add(opt);
+      });
+    });
+}
+
+document.getElementById('preset-select').addEventListener('change', function() {
+  var name = this.value;
+  if (!name || !presets[name]) return;
+  var p = presets[name];
+
+  // Checkboxes
+  ['do_p2p_analysis', 'use_metric_units', 'use_lidar', 'use_udt', 'use_dbm', 'use_knife_edge_diffraction'].forEach(function(field) {
+    var el = document.getElementById('form-checkbox-' + field);
+    if (el) el.checked = !!p[field];
+  });
+
+  // Text inputs
+  ['frequency', 'ground_clutter'].forEach(function(field) {
+    var el = document.getElementById('form-' + field);
+    if (el && p[field] !== undefined) el.value = p[field];
+  });
+
+  // Range inputs (have both range and input elements)
+  ['opacity', 'effective_radiated_power', 'radius', 'terrain_dialectric',
+   'terrain_conductivity', 'itm_reliability', 'itm_confidence', 'resample_reduction_factor'].forEach(function(field) {
+    var range = document.getElementById('form-' + field + '-range');
+    var input = document.getElementById('form-' + field + '-input');
+    if (range && p[field] !== undefined) range.value = p[field];
+    if (input && p[field] !== undefined) input.value = p[field];
+  });
+
+  // Select inputs
+  ['resolution', 'propagation_model', 'propagation_mode', 'terrain_code', 'climate_code'].forEach(function(field) {
+    var el = document.getElementById('form-' + field);
+    if (el && p[field] !== undefined) el.value = p[field];
+  });
+});
+
+function savePreset() {
+  var name = prompt('Preset name:');
+  if (!name) return;
+
+  var values = {};
+  // Checkboxes
+  ['do_p2p_analysis', 'use_metric_units', 'use_lidar', 'use_udt', 'use_dbm', 'use_knife_edge_diffraction'].forEach(function(field) {
+    var el = document.getElementById('form-checkbox-' + field);
+    if (el) values[field] = el.checked;
+  });
+  // Text inputs
+  ['frequency', 'ground_clutter'].forEach(function(field) {
+    var el = document.getElementById('form-' + field);
+    if (el) values[field] = parseFloat(el.value) || 0;
+  });
+  // Range inputs
+  ['opacity', 'effective_radiated_power', 'radius', 'terrain_dialectric',
+   'terrain_conductivity', 'itm_reliability', 'itm_confidence', 'resample_reduction_factor'].forEach(function(field) {
+    var input = document.getElementById('form-' + field + '-input');
+    if (input) values[field] = parseFloat(input.value) || 0;
+  });
+  // Select inputs
+  ['resolution', 'propagation_model', 'propagation_mode', 'terrain_code', 'climate_code'].forEach(function(field) {
+    var el = document.getElementById('form-' + field);
+    if (el) values[field] = el.value;
+  });
+
+  fetch('/api/presets', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({name: name, values: values})
+  }).then(r => {
+    if (r.ok) {
+      alert('Preset saved: ' + name);
+      loadPresetList();
+    } else {
+      alert('Failed to save preset');
+    }
+  });
+}
+
+function deletePreset() {
+  var sel = document.getElementById('preset-select');
+  var name = sel.value;
+  if (!name) { alert('Select a preset first'); return; }
+  if (!confirm('Delete preset "' + name + '"?')) return;
+
+  fetch('/api/presets/delete', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({name: name})
+  }).then(r => {
+    if (r.ok) {
+      alert('Preset deleted');
+      loadPresetList();
+    } else {
+      alert('Failed to delete preset');
+    }
+  });
+}
+
+// Load presets on page load
+loadPresetList();
+</script>
+{% endif %}
 {% endblock %}

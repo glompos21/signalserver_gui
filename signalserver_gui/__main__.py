@@ -11,6 +11,7 @@ sys.path.insert(0, path)
 import configparser
 import functools
 import glob
+import json
 import os
 import re
 import shutil
@@ -101,6 +102,70 @@ def download(filename):
 def error404(error):
     """Render the error page."""
     return "Nothing here, sorry"
+
+
+def _get_presets_path():
+    """Return the path to the presets JSON file."""
+    data_dir = config.get("signalservergui", "data_dir", fallback="data")
+    return os.path.join(data_dir, "presets.json")
+
+
+def _load_presets():
+    """Load presets from JSON file."""
+    presets_path = _get_presets_path()
+    if os.path.isfile(presets_path):
+        with open(presets_path, "r") as f:
+            return json.load(f)
+    return {}
+
+
+def _save_presets(presets):
+    """Save presets to JSON file."""
+    presets_path = _get_presets_path()
+    with open(presets_path, "w") as f:
+        json.dump(presets, f, indent=2)
+
+
+@get("/api/presets")
+def get_presets():
+    """Return all presets as JSON."""
+    from bottle import response
+    response.content_type = "application/json"
+    return json.dumps(_load_presets())
+
+
+@post("/api/presets")
+def save_preset():
+    """Save a new preset from the current form values."""
+    from bottle import response
+    response.content_type = "application/json"
+    preset_name = request.json.get("name")
+    preset_values = request.json.get("values")
+    if not preset_name or not preset_values:
+        response.status = 400
+        return json.dumps({"error": "Name and values required"})
+    presets = _load_presets()
+    presets[preset_name] = preset_values
+    _save_presets(presets)
+    return json.dumps({"status": "ok"})
+
+
+@post("/api/presets/delete")
+def delete_preset():
+    """Delete a preset by name."""
+    from bottle import response
+    response.content_type = "application/json"
+    preset_name = request.json.get("name")
+    if not preset_name:
+        response.status = 400
+        return json.dumps({"error": "Name required"})
+    presets = _load_presets()
+    if preset_name in presets:
+        del presets[preset_name]
+        _save_presets(presets)
+        return json.dumps({"status": "ok"})
+    response.status = 404
+    return json.dumps({"error": "Preset not found"})
 
 
 @get("/search")
