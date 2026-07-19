@@ -17,8 +17,9 @@ fi
 echo "Processing file $kmz"
 
 # Unzip to tmp directory
+rm -rf tmp/
 mkdir tmp
-unzip $kmz -d tmp/
+unzip -o $kmz -d tmp/
 
 # Extract coordinates from kml
 north=$(grep -oPm1 "(?<=<north>)[^<]+" tmp/doc.kml)
