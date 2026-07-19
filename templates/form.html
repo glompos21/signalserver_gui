@@ -97,6 +97,124 @@
   {{i}}
 {%endfor%}
 
+{% if type == "antenna" and action == "edit" %}
+<div class="row mt-4">
+  <div class="col-6">
+    <h5 style="text-align:center">Azimuth Pattern (top view)</h5>
+    <canvas id="az-polar" width="400" height="400" style="display:block;margin:auto;"></canvas>
+  </div>
+  <div class="col-6">
+    <h5 style="text-align:center">Elevation Pattern (side view)</h5>
+    <canvas id="el-polar" width="400" height="400" style="display:block;margin:auto;"></canvas>
+  </div>
+</div>
+<script>
+function drawPolar(canvasId, data, isElevation) {
+    var canvas = document.getElementById(canvasId);
+    var ctx = canvas.getContext('2d');
+    var w = canvas.width, h = canvas.height;
+    var cx = w / 2, cy = h / 2;
+    var radius = Math.min(cx, cy) - 30;
+
+    ctx.clearRect(0, 0, w, h);
+
+    // Grid circles
+    ctx.strokeStyle = '#ddd';
+    ctx.lineWidth = 0.5;
+    for (var r = 0.25; r <= 1.0; r += 0.25) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius * r, 0, 2 * Math.PI);
+        ctx.stroke();
+        // Label
+        ctx.fillStyle = '#999';
+        ctx.font = '10px monospace';
+        ctx.fillText((r * 100).toFixed(0) + '%', cx + 3, cy - radius * r + 12);
+    }
+
+    // Grid lines (every 30 degrees)
+    for (var a = 0; a < 360; a += 30) {
+        var rad = a * Math.PI / 180;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx + radius * Math.sin(rad), cy - radius * Math.cos(rad));
+        ctx.stroke();
+        // Degree label
+        ctx.fillStyle = '#666';
+        ctx.font = '11px sans-serif';
+        var lx = cx + (radius + 15) * Math.sin(rad);
+        var ly = cy - (radius + 15) * Math.cos(rad);
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        if (isElevation) {
+            ctx.fillText((a <= 180 ? a - 90 : a - 270) + '°', lx, ly);
+        } else {
+            ctx.fillText(a + '°', lx, ly);
+        }
+    }
+
+    if (!data || data.length === 0) return;
+
+    // Draw antenna pattern
+    ctx.beginPath();
+    ctx.strokeStyle = '#e53935';
+    ctx.fillStyle = 'rgba(229, 57, 53, 0.15)';
+    ctx.lineWidth = 2;
+
+    if (isElevation) {
+        // Elevation: map -10..90 to 0..360 by mirroring
+        // Forward: degrees map to top half, mirrored to bottom
+        for (var i = 0; i < data.length; i++) {
+            var deg = (data[i].deg + 90) * (180 / 100); // map -10..90 to ~0..180
+            var gain = data[i].gain;
+            var rad = deg * Math.PI / 180;
+            var x = cx + radius * gain * Math.sin(rad);
+            var y = cy - radius * gain * Math.cos(rad);
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        // Mirror
+        for (var i = data.length - 1; i >= 0; i--) {
+            var deg = 360 - (data[i].deg + 90) * (180 / 100);
+            var gain = data[i].gain;
+            var rad = deg * Math.PI / 180;
+            var x = cx + radius * gain * Math.sin(rad);
+            var y = cy - radius * gain * Math.cos(rad);
+            ctx.lineTo(x, y);
+        }
+    } else {
+        // Azimuth: 0-359 degrees, 0=north (top)
+        for (var i = 0; i < data.length; i++) {
+            var deg = data[i].deg;
+            var gain = data[i].gain;
+            var rad = deg * Math.PI / 180;
+            var x = cx + radius * gain * Math.sin(rad);
+            var y = cy - radius * gain * Math.cos(rad);
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+    }
+
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // North/Front indicator
+    ctx.fillStyle = '#333';
+    ctx.font = 'bold 13px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(isElevation ? 'Front' : 'N', cx, 12);
+}
+
+// Load antenna pattern
+fetch('/api/antenna/{{item.id}}/pattern')
+    .then(r => r.json())
+    .then(data => {
+        drawPolar('az-polar', data.azimuth, false);
+        drawPolar('el-polar', data.elevation, true);
+    });
+</script>
+{% endif %}
+
 {% if type == "plot" %}
 <script>
 var presets = {};

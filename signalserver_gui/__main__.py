@@ -368,6 +368,42 @@ def get_elevation_at_point():
     return json.dumps({"elevation": elevation, "lat": lat, "lng": lng})
 
 
+@get("/api/antenna/<id:int>/pattern")
+def get_antenna_pattern(id, db):
+    """Return antenna azimuth and elevation pattern data as JSON."""
+    from bottle import response
+    response.content_type = "application/json"
+
+    antenna = db.query(Antenna).filter_by(id=id).first()
+    if not antenna:
+        response.status = 404
+        return json.dumps({"error": "Antenna not found"})
+
+    az_file = os.path.join("data", "antennas", antenna.type, antenna.filename + ".az")
+    el_file = os.path.join("data", "antennas", antenna.type, antenna.filename + ".el")
+
+    azimuth = []
+    elevation = []
+
+    if os.path.isfile(az_file):
+        with open(az_file, "r") as f:
+            lines = f.readlines()
+            for line in lines[1:]:  # skip offset header
+                parts = line.strip().split("\t")
+                if len(parts) == 2:
+                    azimuth.append({"deg": int(parts[0]), "gain": float(parts[1])})
+
+    if os.path.isfile(el_file):
+        with open(el_file, "r") as f:
+            lines = f.readlines()
+            for line in lines[1:]:  # skip offset header
+                parts = line.strip().split("\t")
+                if len(parts) == 2:
+                    elevation.append({"deg": int(parts[0]), "gain": float(parts[1])})
+
+    return json.dumps({"azimuth": azimuth, "elevation": elevation, "name": antenna.name})
+
+
 @get("/search")
 def search(db):
     """Render the station search page."""
