@@ -764,14 +764,20 @@ def get_config():
 
 
 @get("/map_popup")
-def map_popup():
+def map_popup(db):
     """Render the map popup page."""
     geotiff = request.query.geotiff
     map_lat = config.get("signalservergui", "map_latitude", fallback="35.502")
     map_lng = config.get("signalservergui", "map_longitude", fallback="23.957")
     map_zoom = config.get("signalservergui", "map_zoom", fallback="12")
+    stations = db.query(Station).all()
+    stations_json = json.dumps([
+        {"name": s.name, "lat": s.latitude, "lng": s.longitude, "height": s.height}
+        for s in stations if s.latitude and s.longitude
+    ])
     return template("map_popup.html", geotiff=geotiff,
-                    map_lat=map_lat, map_lng=map_lng, map_zoom=map_zoom)
+                    map_lat=map_lat, map_lng=map_lng, map_zoom=map_zoom,
+                    stations_json=stations_json)
 
 
 if __name__ == "__main__":

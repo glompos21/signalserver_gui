@@ -157,7 +157,25 @@
         };
 
         baseMaps["OpenStreetMap"].addTo(map);
-        L.control.layers(baseMaps, null, {position: 'topleft'}).addTo(map);
+
+        // Station markers (X marks)
+        var stationMarkers = L.layerGroup();
+        var stations = {{stations_json}};
+        stations.forEach(function(s) {
+            var m = L.marker([s.lat, s.lng], {
+                icon: L.divIcon({
+                    className: '',
+                    html: '<div style="color:#000;font-size:18px;font-weight:bold;text-shadow:1px 1px 2px #fff,-1px -1px 2px #fff,1px -1px 2px #fff,-1px 1px 2px #fff;">&#10060;</div>',
+                    iconSize: [20, 20],
+                    iconAnchor: [10, 10]
+                })
+            });
+            m.bindPopup('<b>' + s.name + '</b><br>Lat: ' + s.lat + '<br>Lng: ' + s.lng + '<br>Height: ' + s.height + ' m');
+            stationMarkers.addLayer(m);
+        });
+        stationMarkers.addTo(map);
+
+        L.control.layers(baseMaps, {"Stations": stationMarkers}, {position: 'topleft'}).addTo(map);
 
         var marker;
         map.on('click', function (e) {

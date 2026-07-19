@@ -25,7 +25,7 @@
     {{macros.button("Delete", "danger",href="/"+type+"/"+item.id|string+"/delete")}}
 {%endif%}
 </div>
-{% if type == "station" and action == "new"%}
+{% if type == "station" %}
 <button onclick="window.open('/map_popup', '_blank')">Open Map</button>
 {%endif%}
 {% if type == "plot" %}
