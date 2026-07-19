@@ -3,7 +3,7 @@
     "frequency": 868.0,
     "effective_radiated_power": 0.1,
     "radius": 20,
-    "resolution": 1200,
+    "resolution": 3600,
     "propagation_model": 1,
     "propagation_mode": "",
     "terrain_code": "",
