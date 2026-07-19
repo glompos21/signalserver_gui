@@ -15,6 +15,8 @@ import os
 import re
 import shutil
 
+import pyproj
+
 from bottle import (
     HTTPError,
     abort,
@@ -525,6 +527,15 @@ def view_item(item_type, id, db):
         redirect("/")
     item = q.first()
     parts = {"type": item_type, "item": item}
+    if item_type == "plot" and item.do_p2p_analysis and item.station2:
+        geodesic = pyproj.Geod(ellps="WGS84")
+        _, _, distance = geodesic.inv(
+            item.station1.longitude,
+            item.station1.latitude,
+            item.station2.longitude,
+            item.station2.latitude,
+        )
+        parts["p2p_distance_km"] = distance / 1000.0
     return template("view.html", parts)
 
 

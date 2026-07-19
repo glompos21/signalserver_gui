@@ -59,6 +59,14 @@ def load_antennas(db):
         },
         {
             "type": "antenna",
+            "columns": {
+                "name": "SDK4-868-SMA",
+                "type": "dipole",
+                "filename": "SDK4-868-SMA",
+            },
+        },
+        {
+            "type": "antenna",
             "columns": {"name": "Generic Yagi", "type": "yagi", "filename": "yagi"},
         },
         {

@@ -101,4 +101,19 @@ href="/"+type+"/"+item.id|string+"/delete")}}
     {% endfor %}
   </tbody>
 </table>
+{% if p2p_distance_km is defined %}
+<h2>P2P Distance:</h2>
+<table class="table table-sm table-striped table-hover">
+  <thead class="table-dark">
+    <th scope="col" style="width: 50%">Parameter</th>
+    <th scope="col">Value</th>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Distance between stations</td>
+      <td>{{ "%.3f"|format(p2p_distance_km) }} km ({{ "%.0f"|format(p2p_distance_km * 1000) }} m)</td>
+    </tr>
+  </tbody>
+</table>
+{% endif %}
 {% endif %} {% endblock %}

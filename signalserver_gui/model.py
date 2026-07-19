@@ -161,7 +161,7 @@ plot_args = {
         "do_p2p_analysis": {
             "flag": None,
             "depends": None,
-            "hint": "Also perform point to point analysis.",
+            "hint": "Enable point-to-point (P2P) analysis between Station 1 (Tx) and Station 2 (Rx). Produces a path profile showing terrain, Fresnel zones, and link budget. Requires Station 2 to be set.",
             "form": {
                 "type": "checkbox",
                 "parameters": {"default": False, "required": True},
@@ -170,16 +170,16 @@ plot_args = {
         "use_metric_units": {
             "flag": "-m",
             "depends": None,
-            "hint": "Use metric units in leiu of imperial units for distance measurements.",
+            "hint": "Use metric units (kilometers, meters) instead of imperial (miles, feet) for distance and height measurements throughout the analysis.",
             "form": {
                 "type": "checkbox",
-                "parameters": {"default": False, "required": True},
+                "parameters": {"default": True, "required": True},
             },
         },
         "use_lidar": {
             "flag": None,
             "depends": None,
-            "hint": "Include lidar options.",
+            "hint": "Enable high-resolution LIDAR elevation data for the simulation. LIDAR provides much finer terrain detail than standard SRTM data. Requires LIDAR tiles configured in global settings.",
             "form": {
                 "type": "checkbox",
                 "parameters": {"default": False, "required": True},
@@ -188,7 +188,7 @@ plot_args = {
         "use_udt": {
             "flag": None,
             "depends": None,
-            "hint": "Include user data options.",
+            "hint": "Enable user-defined terrain/clutter data. Allows custom point clutter (buildings, trees, etc.) to be overlaid on the terrain model. Requires UDT files configured in global settings.",
             "form": {
                 "type": "checkbox",
                 "parameters": {"default": False, "required": True},
@@ -197,16 +197,16 @@ plot_args = {
         "use_dbm": {
             "flag": "-dbm",
             "depends": None,
-            "hint": "Plot Rxd signal power instead of field strength in dBuV/m",
+            "hint": "Plot received signal power in dBm instead of field strength in dBuV/m. Use dBm when you need to compare against receiver sensitivity specs (e.g. -100 dBm).",
             "form": {
                 "type": "checkbox",
-                "parameters": {"default": False, "required": True},
+                "parameters": {"default": True, "required": True},
             },
         },
         "use_knife_edge_diffraction": {
             "flag": "-ked",
             "depends": None,
-            "hint": "Knife edge diffraction (Already on for ITM)",
+            "hint": "Enable knife-edge diffraction to model signal bending over sharp terrain obstacles (hills, ridges). Already included in ITM/ITWOM models — only needed for simpler models like LOS or FSPL.",
             "form": {
                 "type": "checkbox",
                 "parameters": {"default": False, "required": True},
@@ -215,14 +215,14 @@ plot_args = {
         "opacity": {
             "flag": None,
             "depends": None,
-            "hint": "Opacity of plot image (0.0-1.0).",
+            "hint": "Transparency of the coverage overlay on the map. 1.0 = fully opaque, 0.05 = nearly transparent. Lower values let you see the underlying map terrain through the plot.",
             "form": {
                 "type": "range",
                 "parameters": {
                     "min": 0.05,
                     "max": 1.0,
                     "step": 0.05,
-                    "default": 1,
+                    "default": 0.5,
                     "required": True,
                 },
             },
@@ -230,7 +230,7 @@ plot_args = {
         "effective_radiated_power": {
             "flag": "-erp",
             "depends": None,
-            "hint": "Tx Total Effective Radiated Power in Watts (dBd) inc Tx+Rx gain. 2.14dBi = 0dBd",
+            "hint": "Total Effective Radiated Power of the transmitter in Watts, referenced to a dipole (dBd). Includes transmitter power plus antenna gain. Note: 0 dBd = 2.14 dBi. Higher ERP = larger coverage area.",
             "form": {
                 "type": "range",
                 "parameters": {
@@ -246,7 +246,7 @@ plot_args = {
         "frequency": {
             "flag": "-f",
             "depends": None,
-            "hint": "Tx Frequency (MHz) 20MHz to 100GHz (LOS after 20GHz).",
+            "hint": "Transmitter frequency in MHz (range: 20 MHz to 100,000 MHz). Lower frequencies propagate further and penetrate obstacles better. Above 20 GHz only line-of-sight propagation is modeled.",
             "form": {
                 "type": "text",
                 "parameters": {
@@ -259,7 +259,7 @@ plot_args = {
         "radius": {
             "flag": "-R",
             "depends": None,
-            "hint": "Radius (Units depended on the 'use_metric' option)",
+            "hint": "Maximum analysis radius from the transmitter. Units are miles (imperial) or kilometers (metric) depending on the 'Use Metric Units' setting. Larger radius = longer computation time.",
             "form": {
                 "type": "range",
                 "parameters": {
@@ -275,7 +275,7 @@ plot_args = {
         "resolution": {
             "flag": "-res",
             "depends": None,
-            "hint": "Pixels per tile. 300/600/1200/3600 (Optional. LIDAR res is within the tile)",
+            "hint": "Terrain resolution in pixels per tile. Higher values = finer detail but slower computation. 300 (~900m), 600 (~450m), 1200 (~90m, recommended), 3600 (~30m). LIDAR data uses its own internal resolution.",
             "form": {
                 "type": "select",
                 "parameters": {
@@ -288,7 +288,7 @@ plot_args = {
         "propagation_model": {
             "flag": "-pm",
             "depends": None,
-            "hint": "Propagation model. 1: ITM, 2: LOS, 3: Hata, 4: ECC33, 5: SUI, 6: COST-Hata, 7: FSPL, 8: ITWOM, 9: Ericsson, 10: Plane earth, 11: Egli VHF/UHF, 12: Soil",
+            "hint": "Radio propagation model to simulate signal behavior. ITM/ITWOM: general-purpose terrain-based models (most accurate). LOS: line-of-sight only. Hata/COST-Hata: urban/suburban mobile. ECC33: UHF broadcasting. SUI: fixed wireless broadband. FSPL: free-space (no terrain). Ericsson: cellular planning. Plane Earth: flat ground reflection. Egli: VHF/UHF empirical. Soil: ground-penetrating.",
             "form": {
                 "type": "select_tuple",
                 "parameters": {
@@ -314,7 +314,7 @@ plot_args = {
         "propagation_mode": {
             "flag": "-pe",
             "depends": None,
-            "hint": "Propagation model mode: 1:Urban, 2:Suburban, 3:Rural",
+            "hint": "Environment type for the propagation model. Urban: dense buildings, high signal loss. Suburban: moderate buildings and vegetation. Rural: open terrain, minimal obstructions. Affects path loss calculations in Hata, COST-Hata, SUI, and ECC33 models.",
             "form": {
                 "type": "select_tuple",
                 "parameters": {
@@ -330,7 +330,7 @@ plot_args = {
         "terrain_code": {
             "flag": "-te",
             "depends": None,
-            "hint": "Terrain code 1-6 (optional - 1. Water, 2. Marsh, 3. Farmland, 4. Mountain, 5. Desert, 6. Urban",
+            "hint": "Ground surface type affecting signal reflection and absorption. Water: best conductivity, strong reflections. Marsh: wet soil, moderate conductivity. Farmland: average soil. Mountain: rocky, irregular terrain. Desert: dry, low conductivity. Urban: buildings and concrete. Used by ITM/ITWOM for ground constants.",
             "form": {
                 "type": "select_tuple",
                 "parameters": {
@@ -349,7 +349,7 @@ plot_args = {
         "terrain_dialectric": {
             "flag": "-terdic",
             "depends": None,
-            "hint": "Terrain dielectric value 2-80 (optional)",
+            "hint": "Dielectric constant of the ground surface (2-80). Low values (~2-5): dry soil/rock. High values (~60-80): water/wet ground. Affects signal reflection at ground level. Override this if the terrain code defaults don't match your site.",
             "form": {
                 "type": "range",
                 "parameters": {"min": 2, "max": 80, "step": 1, "default": 2},
@@ -358,7 +358,7 @@ plot_args = {
         "terrain_conductivity": {
             "flag": "-tercon",
             "depends": None,
-            "hint": "Terrain conductivity 0.01-0.0001 (optional)",
+            "hint": "Electrical conductivity of the ground in Siemens/meter (0.0001-0.01). Low values (~0.0001): dry/rocky ground. High values (~0.01): saltwater/wet soil. Affects ground-wave propagation and surface reflections.",
             "form": {
                 "type": "range",
                 "parameters": {
@@ -373,7 +373,7 @@ plot_args = {
         "climate_code": {
             "flag": "-cl",
             "depends": None,
-            "hint": "Climate code 1-7 (optional - 1. Equatorial 2. Continental subtropical 3. Maritime subtropical 4. Desert 5. Continental temperate 6. Maritime temperate (Land) 7. Maritime temperate (Sea)",
+            "hint": "Climate zone affecting atmospheric refractivity and signal propagation. Equatorial: hot/humid, strong ducting. Continental Subtropical: warm inland. Maritime Subtropical: warm coastal. Desert: hot/dry. Continental Temperate: mid-latitude inland. Maritime Temperate (Land/Sea): mid-latitude coastal. Used by ITM/ITWOM models.",
             "form": {
                 "type": "select_tuple",
                 "parameters": {
@@ -393,7 +393,7 @@ plot_args = {
         "itm_reliability": {
             "flag": "-rel",
             "depends": None,
-            "hint": "Reliability for ITM model (% of 'time') 1 to 99 (optional, default 50%)",
+            "hint": "ITM time reliability (1-99%). The percentage of time the predicted signal level will be met or exceeded. Higher values = more conservative (weaker) predictions. 50% = median. 90%+ recommended for critical links.",
             "form": {
                 "type": "range",
                 "parameters": {
@@ -408,7 +408,7 @@ plot_args = {
         "itm_confidence": {
             "flag": "-conf",
             "depends": None,
-            "hint": "Confidence for ITM model (% of 'situations') 1 to 99 (optional, default 50%)",
+            "hint": "ITM situation confidence (1-99%). The percentage of similar locations where the prediction is expected to hold. Accounts for variability between locations with similar terrain. 50% = median. Higher = more conservative.",
             "form": {
                 "type": "range",
                 "parameters": {
@@ -423,7 +423,7 @@ plot_args = {
         "ground_clutter": {
             "flag": "-gc",
             "depends": None,
-            "hint": "Random ground clutter (Units depend on the 'use_metric' option).",
+            "hint": "Average height of random ground clutter (trees, buildings, etc.) added uniformly across the terrain. Units are feet (imperial) or meters (metric). Simulates obstructions not in the elevation data.",
             "form": {
                 "type": "text",
                 "parameters": {
@@ -436,7 +436,7 @@ plot_args = {
         "resample_reduction_factor": {
             "flag": "-resample",
             "depends": ["use_lidar"],
-            "hint": "Reduce Lidar resolution by specified factor (2 : 50%)",
+            "hint": "Downsample LIDAR data to speed up computation. Factor 1 = full resolution, 2 = half resolution (50%), 4 = quarter, etc. Use higher factors for quick previews, factor 1 for final analysis.",
             "form": {
                 "type": "range",
                 "parameters": {
