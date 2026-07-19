@@ -185,9 +185,21 @@
                 map.removeLayer(marker);
             }
             marker = L.marker([lat, lng]).addTo(map);
-            document.getElementById('coordinates').innerHTML = 'Coordinates:<br>  ' + lat + '<br> ' + lng;
+            document.getElementById('coordinates').innerHTML = 'Coordinates:<br>' + lat.toFixed(5) + '<br>' + lng.toFixed(5) + '<br><span id="click-elev">...</span>';
             document.getElementById('coordinates').style.top = '1%';
             document.getElementById('coordinates').style.left = '80%';
+
+            // Fetch elevation at clicked point
+            fetch('/api/elevation/point?lat=' + lat.toFixed(5) + '&lng=' + lng.toFixed(5))
+                .then(r => r.json())
+                .then(data => {
+                    var elevSpan = document.getElementById('click-elev');
+                    if (data.elevation !== null) {
+                        elevSpan.innerHTML = '<b>Elev: ' + data.elevation + ' m</b>';
+                    } else {
+                        elevSpan.textContent = 'No elev data';
+                    }
+                });
         });
 
         function getQueryParam(param) {

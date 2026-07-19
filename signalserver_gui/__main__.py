@@ -294,6 +294,80 @@ def get_highest_point():
     })
 
 
+@get("/api/elevation/point")
+def get_elevation_at_point():
+    """Get elevation at a specific lat/lng using local HD SDF data."""
+    from bottle import response
+    import bz2
+    import gzip
+    import math
+
+    response.content_type = "application/json"
+
+    try:
+        lat = float(request.params.get("lat"))
+        lng = float(request.params.get("lng"))
+    except (TypeError, ValueError):
+        response.status = 400
+        return json.dumps({"error": "lat and lng params required"})
+
+    elev_dir = config.get("signalserver", "elevation_data_dir",
+                          fallback=os.path.join(config.get("signalservergui", "data_dir", fallback="data"), "elevation"))
+
+    # Convert to western longitude convention
+    west_lon = (360 - lng) if lng > 0 else abs(lng)
+    lat_tile = int(math.floor(lat))
+    lon_tile = int(math.floor(west_lon))
+
+    tile_name = f"{lat_tile}_{lat_tile + 1}_{lon_tile}_{lon_tile + 1}"
+    resolution = 3600
+    sdf_path = None
+
+    for suffix in ["-hd.sdf.bz2", "-hd.sdf.gz", "-hd.sdf"]:
+        candidate = os.path.join(elev_dir, tile_name + suffix)
+        if os.path.isfile(candidate):
+            sdf_path = candidate
+            break
+
+    if not sdf_path:
+        return json.dumps({"elevation": None, "error": "No elevation data for this location"})
+
+    try:
+        if sdf_path.endswith('.bz2'):
+            with bz2.open(sdf_path, 'rt') as f:
+                lines = f.readlines()
+        elif sdf_path.endswith('.gz'):
+            with gzip.open(sdf_path, 'rt') as f:
+                lines = f.readlines()
+        else:
+            with open(sdf_path, 'r') as f:
+                lines = f.readlines()
+    except Exception:
+        return json.dumps({"elevation": None, "error": "Failed to read elevation data"})
+
+    header_max_w = int(lines[0].strip())
+    header_min_n = int(lines[1].strip())
+    header_min_w = int(lines[2].strip())
+    header_max_n = int(lines[3].strip())
+
+    lat_step = (header_max_n - header_min_n) / resolution
+    lon_step = (header_max_w - header_min_w) / resolution
+
+    row = int((lat - header_min_n) / lat_step)
+    col = int((west_lon - header_min_w) / lon_step)
+
+    if row < 0 or row >= resolution or col < 0 or col >= resolution:
+        return json.dumps({"elevation": None, "error": "Point outside tile bounds"})
+
+    # Read specific line (header + row*resolution + col)
+    line_idx = 4 + row * resolution + col
+    if line_idx >= len(lines):
+        return json.dumps({"elevation": None, "error": "Data index out of range"})
+
+    elevation = int(lines[line_idx].strip())
+    return json.dumps({"elevation": elevation, "lat": lat, "lng": lng})
+
+
 @get("/search")
 def search(db):
     """Render the station search page."""
