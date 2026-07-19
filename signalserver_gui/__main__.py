@@ -767,7 +767,11 @@ def get_config():
 def map_popup():
     """Render the map popup page."""
     geotiff = request.query.geotiff
-    return template("map_popup.html", geotiff=geotiff)
+    map_lat = config.get("signalservergui", "map_latitude", fallback="35.502")
+    map_lng = config.get("signalservergui", "map_longitude", fallback="23.957")
+    map_zoom = config.get("signalservergui", "map_zoom", fallback="12")
+    return template("map_popup.html", geotiff=geotiff,
+                    map_lat=map_lat, map_lng=map_lng, map_zoom=map_zoom)
 
 
 if __name__ == "__main__":
