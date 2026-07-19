@@ -70,6 +70,45 @@
             font-size: 13px;
             display: none;
         }
+
+        #tools-panel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 8px 12px;
+            border: 1px solid #999;
+            border-radius: 5px;
+            z-index: 1000;
+            font-family: sans-serif;
+            font-size: 13px;
+        }
+
+        #tools-panel button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        #tools-panel button:hover {
+            background: #388E3C;
+        }
+
+        #tools-panel button:disabled {
+            background: #999;
+            cursor: wait;
+        }
+
+        #highest-info {
+            display: block;
+            margin-top: 6px;
+            font-family: monospace;
+            font-size: 12px;
+        }
     </style>
     <script src="/js/leaflet.js"></script>
     <script src="/js/leaflet.draw.js"></script>
@@ -87,13 +126,38 @@
         <div id="legend-rows"></div>
     </div>
     <div id="pixel-value"></div>
+    <div id="tools-panel">
+        <button id="btn-find-highest" onclick="findHighestPoint()" title="Find highest elevation point in visible area">&#9650; Find Highest Point</button>
+        <button onclick="clearHighestPoints()" style="background:#999;color:white;border:none;padding:6px 10px;border-radius:4px;cursor:pointer;font-size:12px;margin-left:4px;" title="Clear all markers">Clear</button>
+        <span id="highest-info"></span>
+    </div>
 
     <script>
 
         var map = L.map('map').setView([51.505, -0.09], 13);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        }).addTo(map);
+
+        // Base map layers
+        var baseMaps = {
+            "OpenStreetMap": L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            }),
+            "Topo (OpenTopoMap)": L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenTopoMap (CC-BY-SA)',
+                maxZoom: 17
+            }),
+            "Satellite (Esri)": L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: '&copy; Esri'
+            }),
+            "Terrain (Stamen)": L.tileLayer('https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; Stadia Maps &copy; Stamen Design'
+            }),
+            "Dark": L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; Stadia Maps'
+            })
+        };
+
+        baseMaps["OpenStreetMap"].addTo(map);
+        L.control.layers(baseMaps, null, {position: 'topleft'}).addTo(map);
 
         var marker;
         map.on('click', function (e) {
@@ -370,6 +434,72 @@
             var layer = event.layer;
             drawnItems.addLayer(layer);
         });
+
+        // Find highest elevation point using local SDF data
+        var highestMarkers = L.layerGroup().addTo(map);
+        var highestCount = 0;
+
+        function findHighestPoint() {
+            var btn = document.getElementById('btn-find-highest');
+            var info = document.getElementById('highest-info');
+            btn.disabled = true;
+            btn.textContent = 'Searching...';
+
+            var bounds = map.getBounds();
+            var url = '/api/elevation/highest?south=' + bounds.getSouth().toFixed(5) +
+                      '&north=' + bounds.getNorth().toFixed(5) +
+                      '&west=' + bounds.getWest().toFixed(5) +
+                      '&east=' + bounds.getEast().toFixed(5);
+
+            fetch(url)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.error) {
+                        info.textContent = data.error;
+                        btn.disabled = false;
+                        btn.textContent = '▲ Find Highest Point';
+                        return;
+                    }
+
+                    var lat = data.lat;
+                    var lng = data.lng;
+                    var elev = data.elevation;
+                    highestCount++;
+
+                    var m = L.marker([lat, lng], {
+                        icon: L.divIcon({
+                            className: '',
+                            html: '<div style="background:#e53935;color:white;padding:3px 7px;border-radius:4px;font-size:11px;font-weight:bold;white-space:nowrap;border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,0.3);">&#9650; ' + elev + 'm</div>',
+                            iconSize: [80, 26],
+                            iconAnchor: [40, 26]
+                        })
+                    });
+
+                    m.bindPopup(
+                        '<b>Highest Point #' + highestCount + '</b><br>' +
+                        'Elevation: ' + elev + ' m<br>' +
+                        'Lat: ' + lat.toFixed(5) + '<br>' +
+                        'Lng: ' + lng.toFixed(5)
+                    );
+
+                    highestMarkers.addLayer(m);
+
+                    info.innerHTML = '#' + highestCount + ': <b>' + elev + ' m</b> at ' + lat.toFixed(4) + ', ' + lng.toFixed(4);
+                    btn.disabled = false;
+                    btn.textContent = '▲ Find Highest Point';
+                })
+                .catch(err => {
+                    info.textContent = 'Error: ' + err.message;
+                    btn.disabled = false;
+                    btn.textContent = '▲ Find Highest Point';
+                });
+        }
+
+        function clearHighestPoints() {
+            highestMarkers.clearLayers();
+            highestCount = 0;
+            document.getElementById('highest-info').textContent = '';
+        }
 
     </script>
 </body>

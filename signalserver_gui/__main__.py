@@ -168,6 +168,132 @@ def delete_preset():
     return json.dumps({"error": "Preset not found"})
 
 
+@get("/api/elevation/highest")
+def get_highest_point():
+    """Find the highest elevation point within given map bounds using local SDF data."""
+    from bottle import response
+    import bz2
+    import gzip
+    import numpy as np
+
+    response.content_type = "application/json"
+
+    try:
+        south = float(request.params.get("south"))
+        north = float(request.params.get("north"))
+        west = float(request.params.get("west"))
+        east = float(request.params.get("east"))
+    except (TypeError, ValueError):
+        response.status = 400
+        return json.dumps({"error": "south, north, west, east params required"})
+
+    elev_dir = config.get("signalserver", "elevation_data_dir",
+                          fallback=os.path.join(config.get("signalservergui", "data_dir", fallback="data"), "elevation"))
+
+    # Convert east longitude to western convention used by SDF files (360 - lon for eastern hemisphere)
+    def to_west_lon(lon):
+        if lon > 0:
+            return 360 - lon
+        return abs(lon)
+
+    # Determine which SDF tiles we need
+    import math
+    west_w = to_west_lon(west)
+    east_w = to_west_lon(east)
+    min_w = int(math.floor(min(west_w, east_w)))
+    max_w = int(math.ceil(max(west_w, east_w)))
+    min_lat = int(math.floor(south))
+    max_lat = int(math.ceil(north))
+
+    best_elev = -9999
+    best_lat = 0
+    best_lng = 0
+
+    for lat_tile in range(min_lat, max_lat):
+        for lon_tile in range(min_w, max_w):
+            # HD tiles only (3600 resolution)
+            tile_name = f"{lat_tile}_{lat_tile + 1}_{lon_tile}_{lon_tile + 1}"
+            resolution = 3600
+            sdf_path = None
+
+            for suffix in ["-hd.sdf.bz2", "-hd.sdf.gz", "-hd.sdf"]:
+                candidate = os.path.join(elev_dir, tile_name + suffix)
+                if os.path.isfile(candidate):
+                    sdf_path = candidate
+                    break
+
+            if not sdf_path:
+                continue
+
+            # Read SDF file
+            try:
+                if sdf_path.endswith('.bz2'):
+                    with bz2.open(sdf_path, 'rt') as f:
+                        lines = f.readlines()
+                elif sdf_path.endswith('.gz'):
+                    with gzip.open(sdf_path, 'rt') as f:
+                        lines = f.readlines()
+                else:
+                    with open(sdf_path, 'r') as f:
+                        lines = f.readlines()
+            except Exception:
+                continue
+
+            # Parse header: max_west, min_north, min_west, max_north
+            header_max_w = int(lines[0].strip())
+            header_min_n = int(lines[1].strip())
+            header_min_w = int(lines[2].strip())
+            header_max_n = int(lines[3].strip())
+
+            # Parse elevation data into numpy array
+            data = np.array([int(l.strip()) for l in lines[4:] if l.strip()], dtype=np.int32)
+            if len(data) != resolution * resolution:
+                continue
+            grid = data.reshape(resolution, resolution)
+
+            # SDF grid: rows go south to north, cols go west to east
+            # Lat range: header_min_n to header_max_n
+            # Lon range (western): header_min_w to header_max_w
+            lat_step = (header_max_n - header_min_n) / resolution
+            lon_step = (header_max_w - header_min_w) / resolution
+
+            # Clip to requested bounds (in western lon convention)
+            row_start = max(0, int((south - header_min_n) / lat_step))
+            row_end = min(resolution, int(math.ceil((north - header_min_n) / lat_step)))
+            col_start = max(0, int((min(west_w, east_w) - header_min_w) / lon_step))
+            col_end = min(resolution, int(math.ceil((max(west_w, east_w) - header_min_w) / lon_step)))
+
+            if row_start >= row_end or col_start >= col_end:
+                continue
+
+            sub = grid[row_start:row_end, col_start:col_end]
+            if sub.size == 0:
+                continue
+
+            max_idx = np.argmax(sub)
+            max_val = sub.flat[max_idx]
+
+            if max_val > best_elev:
+                best_elev = int(max_val)
+                local_row, local_col = np.unravel_index(max_idx, sub.shape)
+                best_lat = header_min_n + (row_start + local_row) * lat_step
+                # Convert western lon back to standard lon
+                w_lon = header_min_w + (col_start + local_col) * lon_step
+                if w_lon > 180:
+                    best_lng = 360 - w_lon
+                else:
+                    best_lng = -w_lon
+
+    if best_elev <= 0:
+        return json.dumps({"error": "No elevation data found for this area"})
+
+    return json.dumps({
+        "elevation": best_elev,
+        "lat": round(best_lat, 5),
+        "lng": round(best_lng, 5)
+    })
+
+
 @get("/search")
 def search(db):
     """Render the station search page."""
