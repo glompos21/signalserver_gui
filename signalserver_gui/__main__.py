@@ -668,11 +668,15 @@ def action_item(item_type, action, db, id=0):
                     "type": "danger",
                 }
             )
-        elif item_type == "station" and (request.forms.get("latitude")== "0.0" or request.forms.get("longitude")== "0.0"):
+        elif item_type == "station" and (
+            not request.forms.get("latitude") or not request.forms.get("longitude")
+            or float(request.forms.get("latitude", 0)) == 0.0
+            or float(request.forms.get("longitude", 0)) == 0.0
+        ):
             messages.append(
                 {
-                    "message": "Latitude and Longitude must be set.",
-                    "title": f"Item update failed.",
+                    "message": "Latitude and Longitude must be set and cannot be zero.",
+                    "title": f"Item creation failed.",
                     "type": "danger",
                 }
         )
