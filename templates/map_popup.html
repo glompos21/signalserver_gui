@@ -22,6 +22,54 @@
             border: 1px solid black;
             z-index: 1000;
         }
+
+        #legend {
+            position: absolute;
+            bottom: 30px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px 14px;
+            border: 1px solid #999;
+            border-radius: 5px;
+            z-index: 1000;
+            font-family: monospace;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+
+        #legend h4 {
+            margin: 0 0 6px 0;
+            font-size: 13px;
+            text-align: center;
+        }
+
+        .legend-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 14px;
+            border: 1px solid #ccc;
+            display: inline-block;
+            flex-shrink: 0;
+        }
+
+        #pixel-value {
+            position: absolute;
+            bottom: 30px;
+            left: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 6px 10px;
+            border: 1px solid #999;
+            border-radius: 5px;
+            z-index: 1000;
+            font-family: monospace;
+            font-size: 13px;
+            display: none;
+        }
     </style>
     <script src="/js/leaflet.js"></script>
     <script src="/js/leaflet.draw.js"></script>
@@ -34,6 +82,11 @@
 <body>
     <div id="coordinates" style="left: 10%;">Click on the map to get coordinates</div>
     <div id="map"></div>
+    <div id="legend">
+        <select id="profile-select" style="width:100%;margin-bottom:6px;font-size:12px;"></select>
+        <div id="legend-rows"></div>
+    </div>
+    <div id="pixel-value"></div>
 
     <script>
 
@@ -65,39 +118,230 @@
         var url_to_geotiff_file = getQueryParam('geotiff');
         console.log("url_to_geotiff_file:", url_to_geotiff_file);
 
+        // Signal profiles: each defines color bands + quality thresholds
+        var signalProfiles = {
+            "Signal Server (rainbow.dcf)": {
+                bands: [
+                    {level:    0, r: 255, g:   0, b:   0, label: "0 dBm (max)"},
+                    {level:  -10, r: 255, g: 128, b:   0, label: "-10 dBm"},
+                    {level:  -20, r: 255, g: 165, b:   0, label: "-20 dBm"},
+                    {level:  -30, r: 255, g: 206, b:   0, label: "-30 dBm"},
+                    {level:  -40, r: 255, g: 255, b:   0, label: "-40 dBm"},
+                    {level:  -50, r: 184, g: 255, b:   0, label: "-50 dBm"},
+                    {level:  -60, r:   0, g: 255, b:   0, label: "-60 dBm"},
+                    {level:  -70, r:   0, g: 208, b:   0, label: "-70 dBm"},
+                    {level:  -80, r:   0, g: 196, b: 196, label: "-80 dBm"},
+                    {level:  -90, r:   0, g: 148, b: 255, label: "-90 dBm"},
+                    {level: -100, r:  80, g:  80, b: 255, label: "-100 dBm"},
+                    {level: -110, r:   0, g:  38, b: 255, label: "-110 dBm"},
+                    {level: -120, r: 142, g:  63, b: 255, label: "-120 dBm"},
+                    {level: -130, r: 196, g:  54, b: 255, label: "-130 dBm"},
+                    {level: -140, r: 255, g:   0, b: 255, label: "-140 dBm"},
+                    {level: -150, r: 255, g: 194, b: 204, label: "-150 dBm (min)"}
+                ],
+                quality: [
+                    {min: -50,  label: "Excellent"},
+                    {min: -70,  label: "Good"},
+                    {min: -90,  label: "Fair"},
+                    {min: -110, label: "Weak"},
+                    {min: -999, label: "Very Weak"}
+                ]
+            },
+            "LoRaWAN": {
+                bands: [
+                    {level:  -20, r:   0, g: 180, b:   0, label: "> -20 dBm  Excellent"},
+                    {level:  -60, r:   0, g: 220, b:   0, label: "> -60 dBm  Very Strong"},
+                    {level:  -80, r: 100, g: 255, b:   0, label: "> -80 dBm  Strong"},
+                    {level: -100, r: 255, g: 255, b:   0, label: "> -100 dBm  Good"},
+                    {level: -110, r: 255, g: 165, b:   0, label: "> -110 dBm  Fair"},
+                    {level: -120, r: 255, g:  80, b:   0, label: "> -120 dBm  Weak"},
+                    {level: -130, r: 255, g:   0, b:   0, label: "> -130 dBm  Very Weak"},
+                    {level: -150, r: 128, g:   0, b:   0, label: "< -130 dBm  No Link"}
+                ],
+                quality: [
+                    {min:  -60, label: "Excellent"},
+                    {min:  -80, label: "Strong"},
+                    {min: -100, label: "Good"},
+                    {min: -110, label: "Fair"},
+                    {min: -120, label: "Weak"},
+                    {min: -130, label: "Very Weak"},
+                    {min: -999, label: "No Link"}
+                ]
+            },
+            "Meshtastic / LoRa": {
+                bands: [
+                    {level:  -20, r:   0, g: 180, b:   0, label: "> -20 dBm  Excellent"},
+                    {level:  -80, r:   0, g: 255, b:   0, label: "> -80 dBm  Strong"},
+                    {level: -100, r: 100, g: 255, b:   0, label: "> -100 dBm  Good"},
+                    {level: -115, r: 255, g: 255, b:   0, label: "> -115 dBm  Fair"},
+                    {level: -125, r: 255, g: 165, b:   0, label: "> -125 dBm  Weak"},
+                    {level: -130, r: 255, g:  60, b:   0, label: "> -130 dBm  Very Weak"},
+                    {level: -140, r: 255, g:   0, b:   0, label: "> -140 dBm  Marginal"},
+                    {level: -150, r: 128, g:   0, b:   0, label: "< -140 dBm  No Link"}
+                ],
+                quality: [
+                    {min:  -80, label: "Excellent"},
+                    {min: -100, label: "Good"},
+                    {min: -115, label: "Fair"},
+                    {min: -125, label: "Weak"},
+                    {min: -130, label: "Very Weak"},
+                    {min: -140, label: "Marginal"},
+                    {min: -999, label: "No Link"}
+                ]
+            },
+            "WiFi (2.4/5 GHz)": {
+                bands: [
+                    {level: -30, r:   0, g: 180, b:   0, label: "> -30 dBm  Excellent"},
+                    {level: -50, r:   0, g: 255, b:   0, label: "> -50 dBm  Good"},
+                    {level: -60, r: 255, g: 255, b:   0, label: "> -60 dBm  Fair"},
+                    {level: -70, r: 255, g: 165, b:   0, label: "> -70 dBm  Weak"},
+                    {level: -80, r: 255, g:   0, b:   0, label: "> -80 dBm  Very Weak"},
+                    {level: -90, r: 128, g:   0, b:   0, label: "< -80 dBm  No Connection"}
+                ],
+                quality: [
+                    {min: -30, label: "Excellent"},
+                    {min: -50, label: "Good"},
+                    {min: -60, label: "Fair"},
+                    {min: -70, label: "Weak"},
+                    {min: -80, label: "Very Weak"},
+                    {min: -999, label: "No Connection"}
+                ]
+            },
+            "UHF/VHF Radio": {
+                bands: [
+                    {level:  -40, r:   0, g: 180, b:   0, label: "> -40 dBm  Full Quieting"},
+                    {level:  -70, r:   0, g: 255, b:   0, label: "> -70 dBm  Good"},
+                    {level:  -90, r: 255, g: 255, b:   0, label: "> -90 dBm  Readable"},
+                    {level: -100, r: 255, g: 165, b:   0, label: "> -100 dBm  Noisy"},
+                    {level: -110, r: 255, g:   0, b:   0, label: "> -110 dBm  Weak"},
+                    {level: -130, r: 128, g:   0, b:   0, label: "< -110 dBm  Unusable"}
+                ],
+                quality: [
+                    {min:  -40, label: "Full Quieting"},
+                    {min:  -70, label: "Good"},
+                    {min:  -90, label: "Readable"},
+                    {min: -100, label: "Noisy"},
+                    {min: -110, label: "Weak"},
+                    {min: -999, label: "Unusable"}
+                ]
+            }
+        };
+
+        var activeProfile = signalProfiles["Signal Server (rainbow.dcf)"];
+        var storedGeoraster = null;
+        var geoLayer = null;
+
+        // Populate profile selector
+        var profileSelect = document.getElementById('profile-select');
+        Object.keys(signalProfiles).forEach(function(name) {
+            var opt = document.createElement('option');
+            opt.value = name;
+            opt.text = name;
+            profileSelect.add(opt);
+        });
+
+        function bandToRgb(band) {
+            return 'rgb(' + band.r + ',' + band.g + ',' + band.b + ')';
+        }
+
+        function rssiToColor(value) {
+            var bands = activeProfile.bands;
+            for (var i = 0; i < bands.length; i++) {
+                if (value >= bands[i].level) {
+                    return bandToRgb(bands[i]);
+                }
+            }
+            return bandToRgb(bands[bands.length - 1]);
+        }
+
+        function rssiQuality(value) {
+            var q = activeProfile.quality;
+            for (var i = 0; i < q.length; i++) {
+                if (value >= q[i].min) return q[i].label;
+            }
+            return q[q.length - 1].label;
+        }
+
+        function buildLegend() {
+            var rowsDiv = document.getElementById('legend-rows');
+            var html = '';
+            activeProfile.bands.forEach(function(c) {
+                html += '<div class="legend-row">';
+                html += '<span class="legend-color" style="background:' + bandToRgb(c) + '"></span>';
+                html += '<span>' + c.label + '</span>';
+                html += '</div>';
+            });
+            rowsDiv.innerHTML = html;
+        }
+
+        function renderLayer() {
+            if (!storedGeoraster) return;
+            if (geoLayer) map.removeLayer(geoLayer);
+
+            geoLayer = new GeoRasterLayer({
+                georaster: storedGeoraster,
+                opacity: 0.8,
+                pixelValuesToColorFn: values => {
+                    var value = values[0];
+                    if (value === 0 || isNaN(value)) return 'rgba(0, 0, 0, 0)';
+                    return rssiToColor(value);
+                }
+            });
+            geoLayer.addTo(map);
+        }
+
+        // Profile change → re-render overlay + legend
+        profileSelect.addEventListener('change', function() {
+            activeProfile = signalProfiles[this.value];
+            buildLegend();
+            renderLayer();
+        });
+
+        // Initial legend
+        buildLegend();
+
+        // Load geotiff
         fetch(url_to_geotiff_file)
             .then(response => {
-                if (!response.ok) {
-                    throw new Error('Network response was not ok');
-                }
+                if (!response.ok) throw new Error('Network response was not ok');
                 return response.arrayBuffer();
             })
             .then(arrayBuffer => {
                 parseGeoraster(arrayBuffer).then(georaster => {
                     console.log("georaster:", georaster);
-                    var min = georaster.mins[0];
-                    var max = georaster.maxs[0];
-                    console.log("min:", min);
-                    console.log("max:", max);
-                    var scale = chroma.scale(['red', 'yellow', 'green']).domain([min, max]);
-
-                    var layer = new GeoRasterLayer({
-                        georaster: georaster,
-                        opacity: 0.8,
-                        pixelValuesToColorFn: values => {
-                            var value = values[0];
-                            if (value < min) {
-                                return 'rgba(0, 0, 0, 0)'; // Transparent
-                            }
-                            return scale(value).hex();
-                        }
-                    });
-                    layer.addTo(map);
-
-                    map.fitBounds(layer.getBounds());
-
+                    storedGeoraster = georaster;
+                    renderLayer();
+                    map.fitBounds(geoLayer.getBounds());
                 });
             });
+
+        // Show pixel value on mouse move
+        var pixelDiv = document.getElementById('pixel-value');
+        map.on('mousemove', function(e) {
+            if (!storedGeoraster) return;
+            var lat = e.latlng.lat;
+            var lng = e.latlng.lng;
+            var gr = storedGeoraster;
+
+            if (lat < gr.ymin || lat > gr.ymax || lng < gr.xmin || lng > gr.xmax) {
+                pixelDiv.style.display = 'none';
+                return;
+            }
+
+            var row = Math.floor((gr.ymax - lat) / gr.pixelHeight);
+            var col = Math.floor((lng - gr.xmin) / gr.pixelWidth);
+
+            if (row >= 0 && row < gr.height && col >= 0 && col < gr.width) {
+                var value = gr.values[0][row][col];
+                if (value && value !== 0) {
+                    pixelDiv.style.display = 'block';
+                    pixelDiv.innerHTML = '<b>' + Math.round(value) + ' dBm</b> — ' + rssiQuality(value);
+                    pixelDiv.style.borderLeft = '4px solid ' + rssiToColor(value);
+                } else {
+                    pixelDiv.style.display = 'none';
+                }
+            }
+        });
 
         // Add Leaflet Draw toolbar
         var drawnItems = new L.FeatureGroup();
