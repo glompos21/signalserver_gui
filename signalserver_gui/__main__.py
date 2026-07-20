@@ -539,6 +539,34 @@ def plot_files(id, db):
         redirect(f"/")
 
 
+@get("/plot/<id:int>/duplicate")
+def duplicate_plot(id, db):
+    """Duplicate an existing plot with a new name."""
+    source = db.query(Plot).filter_by(id=id).first()
+    if not source:
+        abort(404, "Plot not found")
+    # Copy all fields except id, name, timestamps
+    params = {}
+    for col in Plot.__table__.columns:
+        if col.name in ["id", "created", "last_updated"]:
+            continue
+        if col.name == "name":
+            # Generate unique name: append _copy, _copy2, etc.
+            base_name = source.name + "_copy"
+            new_name = base_name
+            counter = 2
+            while db.query(Plot).filter_by(name=new_name).first():
+                new_name = f"{base_name}{counter}"
+                counter += 1
+            params["name"] = new_name
+        else:
+            params[col.name] = getattr(source, col.name)
+    new_plot = Plot(**params)
+    db.add(new_plot)
+    db.commit()
+    redirect(f"/plot/{new_plot.id}/edit?message=PlotDuplicated")
+
+
 @get("/<item_type>/<id:int>/delete")  # Delete confirmation page
 @post(
     "/<item_type>/<id:int>/delete"
