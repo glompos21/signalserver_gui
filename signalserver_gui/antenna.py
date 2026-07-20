@@ -83,6 +83,14 @@ def load_antennas(db):
         },
         {
             "type": "antenna",
+            "columns": {
+                "name": "BLG-AN-040-868",
+                "type": "dipole",
+                "filename": "BLG-AN-040-868",
+            },
+        },
+        {
+            "type": "antenna",
             "columns": {"name": "Generic Yagi", "type": "yagi", "filename": "yagi"},
         },
         {
