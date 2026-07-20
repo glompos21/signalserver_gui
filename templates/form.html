@@ -21,6 +21,7 @@
 {% endblock %}{% block content %}
 <div class="col-12">
 {%if action == "edit"%}
+    {{macros.button("Back to List", "info", href="/"+type+"s")}}
     {{macros.button("View", "primary", href="/"+type+"/"+item.id|string)}}
     {{macros.button("Delete", "danger",href="/"+type+"/"+item.id|string+"/delete")}}
 {%endif%}
