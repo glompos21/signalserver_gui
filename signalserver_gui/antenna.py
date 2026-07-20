@@ -67,6 +67,22 @@ def load_antennas(db):
         },
         {
             "type": "antenna",
+            "columns": {
+                "name": "Dragino DLOS8N 3dBi",
+                "type": "dipole",
+                "filename": "dragino_dlos8n_3dbi",
+            },
+        },
+        {
+            "type": "antenna",
+            "columns": {
+                "name": "RAK ARG16 8dBi",
+                "type": "dipole",
+                "filename": "RAK_ARG16_8dbi",
+            },
+        },
+        {
+            "type": "antenna",
             "columns": {"name": "Generic Yagi", "type": "yagi", "filename": "yagi"},
         },
         {

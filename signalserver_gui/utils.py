@@ -504,19 +504,28 @@ def convert_ant_file(ant_file: str, azimuth_offset=0, elevation_offset=0) -> Non
     az_filename = base_filename + ".az"
     el_filename = base_filename + ".el"
     with open(ant_file, "r") as ant:
-        with open(az_filename, "w") as az:
-            # azimuth offset as provided by
-            az.write(f"{float(azimuth_offset):0.1f}\n")
-            # Read the first 360 lines of the file
-            for i in range(360):
-                az.write(f"{i:d}\t{db_to_norm(float(next(ant))):0.4f}\n")
-        with open(el_filename, "w") as el:
-            # mechanical downtilt, azimuth of tilt
-            el.write(f"{float(elevation_offset):0.1f}\t{float(azimuth_offset):0.1f}\n")
-            # Read the lines for elevations +10 through -90).
-            # The rest of the .ant is unused.
-            for i, line in enumerate(list(ant)[80:181], -10):
-                el.write(f"{i:d}\t{db_to_norm(float(line)):0.4f}\n")
+        all_lines = [line.strip() for line in ant.readlines() if line.strip()]
+
+    # Parse all dB values
+    all_db = [float(line.split()[0]) for line in all_lines]
+
+    # Normalize: if max > 0, subtract max so peak = 0 dB (all values <= 0)
+    max_db = max(all_db)
+    if max_db > 0:
+        all_db = [v - max_db for v in all_db]
+
+    # Azimuth: first 360 values
+    with open(az_filename, "w") as az:
+        az.write(f"{float(azimuth_offset):0.1f}\n")
+        for i in range(min(360, len(all_db))):
+            az.write(f"{i:d}\t{db_to_norm(all_db[i]):0.4f}\n")
+
+    # Elevation: lines 440-540 (maps to -10° through +90°)
+    with open(el_filename, "w") as el:
+        el.write(f"{float(elevation_offset):0.1f}\t{float(azimuth_offset):0.1f}\n")
+        for i, idx in enumerate(range(440, 541), -10):
+            if idx < len(all_db):
+                el.write(f"{i:d}\t{db_to_norm(all_db[idx]):0.4f}\n")
 
 
 def make_analysis_plot(
