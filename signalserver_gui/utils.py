@@ -229,7 +229,7 @@ def generate(config: configparser.ConfigParser, item: Plot) -> str:
     numbers = re.findall(r'\d+\.\d+', area_bountaries)
     # Convert to float for further use (optional)
     dimensions = [float(num) for num in numbers]
-    print(f"HERE Dimension: {dimensions}")
+    print(f": {dimensions}")
     run(
         config["convert"]["path"],
         [
