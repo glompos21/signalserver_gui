@@ -27,7 +27,65 @@
 {%endif%}
 </div>
 {% if type == "station" %}
-<button onclick="window.open('/map_popup', '_blank')">Open Map</button>
+<button type="button" onclick="window.open('/map_popup', 'map_popup', 'width=1000,height=700')">Open Map</button>
+<script>
+function applyMapLocation(data) {
+    // Range fields have both -range and -input elements
+    ['latitude', 'longitude', 'height'].forEach(function(field) {
+        var val = data[field];
+        if (val === null || val === undefined) return;
+        var range = document.getElementById('form-' + field + '-range');
+        var input = document.getElementById('form-' + field + '-input');
+        var text = document.getElementById('form-' + field);
+        if (range) range.value = val;
+        if (input) input.value = val;
+        if (text) text.value = val;
+    });
+}
+
+function checkMapStorage() {
+    var stored = localStorage.getItem('map_selected_location');
+    if (stored) {
+        var data = JSON.parse(stored);
+        if (data.type === 'map_location') {
+            applyMapLocation(data);
+            localStorage.removeItem('map_selected_location');
+            return true;
+        }
+    }
+    return false;
+}
+
+// Listen for postMessage from map popup
+window.addEventListener('message', function(e) {
+    if (e.data && e.data.type === 'map_location') {
+        applyMapLocation(e.data);
+    }
+});
+
+// Listen for storage event (fires when localStorage changes from another tab/window)
+window.addEventListener('storage', function(e) {
+    if (e.key === 'map_selected_location' && e.newValue) {
+        checkMapStorage();
+    }
+});
+
+// Also poll when map window is open
+var _mapPollInterval = null;
+var _origOpen = window.open;
+window.open = function(url, name, features) {
+    var w = _origOpen.call(window, url, name, features);
+    if (name === 'map_popup') {
+        _mapPollInterval = setInterval(function() {
+            if (checkMapStorage() || (w && w.closed)) {
+                clearInterval(_mapPollInterval);
+                checkMapStorage();
+            }
+        }, 500);
+    }
+    return w;
+};
+</script>
 {%endif%}
 {% if type == "plot" %}
 <div class="row g-3 mb-3">

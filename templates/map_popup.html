@@ -129,6 +129,7 @@
     <div id="tools-panel">
         <button id="btn-find-highest" onclick="findHighestPoint()" title="Find highest elevation point in visible area">&#9650; Find Highest Point</button>
         <button onclick="clearHighestPoints()" style="background:#999;color:white;border:none;padding:6px 10px;border-radius:4px;cursor:pointer;font-size:12px;margin-left:4px;" title="Clear all markers">Clear</button>
+        <button id="btn-use-location" onclick="useLocation()" style="background:#1976D2;color:white;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:12px;margin-left:8px;" title="Send coordinates to station form">&#8678; Use Location</button>
         <span id="highest-info"></span>
     </div>
 
@@ -529,6 +530,66 @@
             highestMarkers.clearLayers();
             highestCount = 0;
             document.getElementById('highest-info').textContent = '';
+        }
+
+        // Track last clicked coordinates and elevation for "Use Location"
+        var lastClickedLat = null;
+        var lastClickedLng = null;
+        var lastClickedElev = null;
+
+        // Store coords on map click
+        map.on('click', function(e) {
+            lastClickedLat = e.latlng.lat;
+            lastClickedLng = e.latlng.lng;
+            lastClickedElev = null;
+            fetch('/api/elevation/point?lat=' + e.latlng.lat.toFixed(5) + '&lng=' + e.latlng.lng.toFixed(5))
+                .then(r => r.json())
+                .then(data => {
+                    if (data.elevation !== null) {
+                        lastClickedElev = data.elevation;
+                    }
+                });
+        });
+
+        function useLocation() {
+            if (lastClickedLat === null || lastClickedLng === null) {
+                alert('Click on the map first to select a location.');
+                return;
+            }
+            var btn = document.getElementById('btn-use-location');
+            btn.disabled = true;
+            btn.textContent = 'Fetching elevation...';
+
+            // Always fetch elevation fresh from local DEM before sending
+            fetch('/api/elevation/point?lat=' + lastClickedLat.toFixed(5) + '&lng=' + lastClickedLng.toFixed(5))
+                .then(r => r.json())
+                .then(data => {
+                    var msg = {
+                        type: 'map_location',
+                        latitude: lastClickedLat.toFixed(5),
+                        longitude: lastClickedLng.toFixed(5),
+                        height: (data.elevation !== null && data.elevation !== undefined) ? data.elevation : null
+                    };
+                    localStorage.setItem('map_selected_location', JSON.stringify(msg));
+                    if (window.opener && !window.opener.closed) {
+                        window.opener.postMessage(msg, '*');
+                    }
+                    window.close();
+                })
+                .catch(function() {
+                    // Send without elevation if fetch fails
+                    var msg = {
+                        type: 'map_location',
+                        latitude: lastClickedLat.toFixed(5),
+                        longitude: lastClickedLng.toFixed(5),
+                        height: null
+                    };
+                    localStorage.setItem('map_selected_location', JSON.stringify(msg));
+                    if (window.opener && !window.opener.closed) {
+                        window.opener.postMessage(msg, '*');
+                    }
+                    window.close();
+                });
         }
 
     </script>
