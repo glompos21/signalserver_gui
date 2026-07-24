@@ -1,8 +1,11 @@
 """This module is a collection of utility functions for signalserver_gui."""
 # TODO(Justin): Clean up unused imports.
 import base64
+import bz2
 import configparser
 import glob
+import gzip
+import math
 import os
 from shlex import quote
 import subprocess
@@ -253,7 +256,7 @@ def generate(config: configparser.ConfigParser, item: Plot) -> str:
         p2pa_args.append("-ng")
         command_args.extend(p2pa_args)
         results = run(command, command_args)
-        make_analysis_plot(item, file_base, results, config["convert"]["output_type"])
+        make_analysis_plot(item, file_base, results, config["convert"]["output_type"], config=config)
         report = AnalysisReport.from_file(quote(f"{file_base}.txt"))
         with open(f"{file_base}.json", "w") as f:
             f.write(report.to_json())
@@ -528,8 +531,95 @@ def convert_ant_file(ant_file: str, azimuth_offset=0, elevation_offset=0) -> Non
                 el.write(f"{i:d}\t{db_to_norm(all_db[idx]):0.4f}\n")
 
 
+def get_elevation_from_sdf(lat, lng, elev_dir):
+    """Read elevation from local SDF tile for a single lat/lng point."""
+    west_lon = (360 - lng) if lng > 0 else abs(lng)
+    lat_tile = int(math.floor(lat))
+    lon_tile = int(math.floor(west_lon))
+    tile_name = f"{lat_tile}_{lat_tile + 1}_{lon_tile}_{lon_tile + 1}"
+    resolution = 3600
+
+    sdf_path = None
+    for suffix in ["-hd.sdf.bz2", "-hd.sdf.gz", "-hd.sdf"]:
+        candidate = os.path.join(elev_dir, tile_name + suffix)
+        if os.path.isfile(candidate):
+            sdf_path = candidate
+            break
+
+    if not sdf_path:
+        return 0
+
+    try:
+        if sdf_path.endswith('.bz2'):
+            with bz2.open(sdf_path, 'rt') as f:
+                lines = f.readlines()
+        elif sdf_path.endswith('.gz'):
+            with gzip.open(sdf_path, 'rt') as f:
+                lines = f.readlines()
+        else:
+            with open(sdf_path, 'r') as f:
+                lines = f.readlines()
+    except Exception:
+        return 0
+
+    header_min_n = int(lines[1].strip())
+    header_min_w = int(lines[2].strip())
+    header_max_n = int(lines[3].strip())
+    header_max_w = int(lines[0].strip())
+
+    lat_step = (header_max_n - header_min_n) / resolution
+    lon_step = (header_max_w - header_min_w) / resolution
+
+    row = int((lat - header_min_n) / lat_step)
+    col = int((west_lon - header_min_w) / lon_step)
+
+    if row < 0 or row >= resolution or col < 0 or col >= resolution:
+        return 0
+
+    line_idx = 4 + row * resolution + col
+    if line_idx >= len(lines):
+        return 0
+
+    return int(lines[line_idx].strip())
+
+
+def sample_terrain_profile(lat1, lng1, lat2, lng2, elev_dir, use_metric=True):
+    """Sample terrain elevation along path between two points using local DEM.
+
+    Returns list of (distance, elevation) tuples.
+    Distance in km (metric) or miles (imperial).
+    Elevation in meters.
+    """
+    # Calculate total distance using haversine
+    R = 6371000  # Earth radius in meters
+    dlat = math.radians(lat2 - lat1)
+    dlng = math.radians(lng2 - lng1)
+    a = (math.sin(dlat / 2) ** 2 +
+         math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
+         math.sin(dlng / 2) ** 2)
+    total_dist_m = R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+    # Sample roughly every 30 meters, min 50, max 500 samples
+    num_samples = max(50, min(500, int(total_dist_m / 30)))
+
+    profile = []
+    for i in range(num_samples + 1):
+        t = i / num_samples
+        lat = lat1 + t * (lat2 - lat1)
+        lng = lng1 + t * (lng2 - lng1)
+        elev = get_elevation_from_sdf(lat, lng, elev_dir)
+        dist = t * total_dist_m
+        if use_metric:
+            profile.append((dist / 1000.0, elev))  # km, m
+        else:
+            profile.append((dist / 1609.344, elev * 3.28084))  # miles, feet
+
+    return profile, total_dist_m
+
+
 def make_analysis_plot(
-    item: Plot, file_base: str, results: str, image_type="png"
+    item: Plot, file_base: str, results: str, image_type="png",
+    config: configparser.ConfigParser = None
 ) -> None:
     """Generate a P2P analysis graph image from signalserver analysis files."""
     with open(quote(f"{file_base}_curvature")) as f:
@@ -550,6 +640,26 @@ def make_analysis_plot(
             (float(line.split(" ")[0]), float(line.split(" ")[1])) for line in f
         ]
 
+    # Check if signalserver profile is flat (all same elevation) — use DEM instead
+    profile_elevations = [p[1] for p in profile]
+    profile_is_flat = len(set(profile_elevations)) <= 2
+
+    if profile_is_flat and config and item.station1 and item.station2:
+        elev_dir = config.get(
+            "signalserver", "elevation_data_dir",
+            fallback=os.path.join(
+                config.get("signalservergui", "data_dir", fallback="data"),
+                "elevation"
+            )
+        )
+        dem_profile, total_dist_m = sample_terrain_profile(
+            item.station1.latitude, item.station1.longitude,
+            item.station2.latitude, item.station2.longitude,
+            elev_dir, item.use_metric_units
+        )
+        if dem_profile:
+            profile = dem_profile
+
     reference_df = pd.DataFrame(reference, columns=["Distance", "Value"])
     profile_df = pd.DataFrame(profile, columns=["Distance", "Value"])
     curvature_df = pd.DataFrame(curvature, columns=["Distance", "Value"])
@@ -559,16 +669,44 @@ def make_analysis_plot(
     fresnel_top_df["Value"] = fresnel_top_df["Value"].multiply(-1)
     fresnel60_top_df = fresnel60_bottom_df.copy()
     fresnel60_top_df["Value"] = fresnel60_top_df["Value"].multiply(-1)
+
+    units = ("km", "m") if item.use_metric_units else ("mi", "ft")
+    height_conv = 1.0 if item.use_metric_units else 3.28084
+
+    # Station ground elevations and antenna tip elevations
+    s1_ground = profile_df["Value"].iloc[0] if len(profile_df) > 0 else 0
+    s2_ground = profile_df["Value"].iloc[-1] if len(profile_df) > 0 else 0
+    s1_tip = s1_ground + item.station1.height * height_conv if item.station1 else s1_ground
+    s2_tip = s2_ground + item.station2.height * height_conv if item.station2 else s2_ground
+    max_dist = profile_df["Distance"].max() if len(profile_df) > 0 else reference_df["Distance"].max()
+
     fig = Figure()
+
+    # Terrain profile (brown, filled)
     fig.add_trace(
         Scatter(
-            x=reference_df["Distance"],
-            y=reference_df["Value"],
+            x=profile_df["Distance"],
+            y=profile_df["Value"],
             mode="lines",
-            line=dict(shape="linear", color="rgb(0, 0, 0)", width=4, dash="dot"),
+            line=dict(shape="linear", color="rgb(101, 56, 24)"),
+            name="Terrain Profile",
+            fill="tozeroy",
+            fillcolor="rgba(139, 90, 43, 0.4)",
+        )
+    )
+
+    # Line of Sight between antenna tips
+    fig.add_trace(
+        Scatter(
+            x=[0, max_dist],
+            y=[s1_tip, s2_tip],
+            mode="lines",
+            line=dict(shape="linear", color="rgb(0, 0, 0)", width=2, dash="dot"),
             name="Line of Sight",
         )
     )
+
+    # Earth Curvature
     fig.add_trace(
         Scatter(
             x=curvature_df["Distance"],
@@ -579,6 +717,7 @@ def make_analysis_plot(
         )
     )
 
+    # Fresnel zones
     fig.add_trace(
         Scatter(
             x=fresnel60_bottom_df["Distance"],
@@ -598,19 +737,42 @@ def make_analysis_plot(
         )
     )
 
+    # Station towers (vertical lines from ground to antenna tip)
+    s1_name = item.station1.name if item.station1 else "TX"
+    s2_name = item.station2.name if item.station2 else "RX"
+
+    # Station 1 tower
     fig.add_trace(
         Scatter(
-            x=profile_df["Distance"],
-            y=profile_df["Value"],
-            mode="lines",
-            line=dict(shape="linear", color="rgb(101, 56, 24)"),
-            name="Terrain Profile",
-            fill="tozeroy",
+            x=[0, 0],
+            y=[s1_ground, s1_tip],
+            mode="lines+markers",
+            line=dict(color="rgb(0, 0, 200)", width=4),
+            marker=dict(size=[0, 10], symbol=["circle", "triangle-up"], color="rgb(0, 0, 200)"),
+            name=f"{s1_name} ({item.station1.height:.0f}{units[1]})" if item.station1 else "TX",
+            showlegend=True,
         )
     )
-    # fig.update_xaxes(type="log")
-    # fig.update_yaxes(type="log")
-    units = ("km", "m") if item.use_metric_units else ("mi", "ft")
+
+    # Station 2 tower
+    fig.add_trace(
+        Scatter(
+            x=[max_dist, max_dist],
+            y=[s2_ground, s2_tip],
+            mode="lines+markers",
+            line=dict(color="rgb(200, 0, 0)", width=4),
+            marker=dict(size=[0, 10], symbol=["circle", "triangle-up"], color="rgb(200, 0, 0)"),
+            name=f"{s2_name} ({item.station2.height:.0f}{units[1]})" if item.station2 else "RX",
+            showlegend=True,
+        )
+    )
+
+    # Station name annotations
+    fig.add_annotation(x=0, y=s1_tip, text=s1_name, showarrow=False,
+                       yshift=15, font=dict(size=12, color="rgb(0, 0, 200)"))
+    fig.add_annotation(x=max_dist, y=s2_tip, text=s2_name, showarrow=False,
+                       yshift=15, font=dict(size=12, color="rgb(200, 0, 0)"))
+
     fig.update_layout(
         title="Site to Site Analysis",
         xaxis=dict(
@@ -622,7 +784,7 @@ def make_analysis_plot(
             ticksuffix=units[1],
         ),
         height=480,
-        width=640,
+        width=800,
     )
     fig.write_image(f"{file_base}_ppa.{image_type}")
     # fig.show()
