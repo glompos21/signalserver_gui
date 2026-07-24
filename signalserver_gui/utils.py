@@ -660,25 +660,57 @@ def make_analysis_plot(
         if dem_profile:
             profile = dem_profile
 
-    reference_df = pd.DataFrame(reference, columns=["Distance", "Value"])
     profile_df = pd.DataFrame(profile, columns=["Distance", "Value"])
-    curvature_df = pd.DataFrame(curvature, columns=["Distance", "Value"])
-    fresnel_bottom_df = pd.DataFrame(fresnel, columns=["Distance", "Value"])
-    fresnel60_bottom_df = pd.DataFrame(fresnel60, columns=["Distance", "Value"])
-    fresnel_top_df = fresnel_bottom_df.copy()
-    fresnel_top_df["Value"] = fresnel_top_df["Value"].multiply(-1)
-    fresnel60_top_df = fresnel60_bottom_df.copy()
-    fresnel60_top_df["Value"] = fresnel60_top_df["Value"].multiply(-1)
 
     units = ("km", "m") if item.use_metric_units else ("mi", "ft")
     height_conv = 1.0 if item.use_metric_units else 3.28084
+    dist_conv = 1000.0 if item.use_metric_units else 1609.344  # display units to meters
 
     # Station ground elevations and antenna tip elevations
     s1_ground = profile_df["Value"].iloc[0] if len(profile_df) > 0 else 0
     s2_ground = profile_df["Value"].iloc[-1] if len(profile_df) > 0 else 0
     s1_tip = s1_ground + item.station1.height * height_conv if item.station1 else s1_ground
     s2_tip = s2_ground + item.station2.height * height_conv if item.station2 else s2_ground
-    max_dist = profile_df["Distance"].max() if len(profile_df) > 0 else reference_df["Distance"].max()
+    max_dist = profile_df["Distance"].max() if len(profile_df) > 0 else 1.0
+
+    # Compute Fresnel zones from antenna tips and frequency
+    # F_n = sqrt(n * lambda * d1 * d2 / D) where D = total distance
+    freq_mhz = item.frequency if item.frequency else 868.0
+    wavelength = 299.792458 / freq_mhz  # meters
+    total_dist_m = max_dist * dist_conv
+
+    num_fresnel_pts = 200
+    fresnel_distances = []
+    fresnel_upper = []
+    fresnel_lower = []
+    fresnel60_upper = []
+    fresnel60_lower = []
+
+    for i in range(num_fresnel_pts + 1):
+        t = i / num_fresnel_pts
+        d = t * max_dist  # display distance
+        d1_m = t * total_dist_m  # meters from station 1
+        d2_m = (1 - t) * total_dist_m  # meters from station 2
+
+        # LOS height at this point (linear interpolation between antenna tips)
+        los_height = s1_tip + t * (s2_tip - s1_tip)
+
+        # Fresnel radius (avoid zero at endpoints)
+        if d1_m > 0 and d2_m > 0:
+            f1_radius = math.sqrt(wavelength * d1_m * d2_m / total_dist_m)
+            f1_60_radius = 0.6 * f1_radius
+        else:
+            f1_radius = 0
+            f1_60_radius = 0
+
+        # Convert radius to display units
+        f1_display = f1_radius * height_conv if not item.use_metric_units else f1_radius
+
+        fresnel_distances.append(d)
+        fresnel_upper.append(los_height + f1_display)
+        fresnel_lower.append(los_height - f1_display)
+        fresnel60_upper.append(los_height + 0.6 * f1_display)
+        fresnel60_lower.append(los_height - 0.6 * f1_display)
 
     fig = Figure()
 
@@ -706,34 +738,49 @@ def make_analysis_plot(
         )
     )
 
-    # Earth Curvature
+    # Fresnel zone 100% (filled band)
     fig.add_trace(
         Scatter(
-            x=curvature_df["Distance"],
-            y=curvature_df["Value"],
+            x=fresnel_distances,
+            y=fresnel_upper,
             mode="lines",
-            line=dict(shape="linear", color="rgb(100, 100, 100)"),
-            name="Earth Curvature",
+            line=dict(color="rgba(150, 180, 0, 0.5)", width=1),
+            name="First Fresnel Zone (100%)",
+            showlegend=True,
+        )
+    )
+    fig.add_trace(
+        Scatter(
+            x=fresnel_distances,
+            y=fresnel_lower,
+            mode="lines",
+            line=dict(color="rgba(150, 180, 0, 0.5)", width=1),
+            fill="tonexty",
+            fillcolor="rgba(150, 180, 0, 0.15)",
+            showlegend=False,
         )
     )
 
-    # Fresnel zones
+    # Fresnel zone 60% (filled band)
     fig.add_trace(
         Scatter(
-            x=fresnel60_bottom_df["Distance"],
-            y=fresnel60_bottom_df["Value"],
+            x=fresnel_distances,
+            y=fresnel60_upper,
             mode="lines",
-            line=dict(shape="linear", color="rgb(235, 60, 0)"),
+            line=dict(color="rgba(235, 60, 0, 0.5)", width=1),
             name="First Fresnel Zone (60%)",
+            showlegend=True,
         )
     )
     fig.add_trace(
         Scatter(
-            x=fresnel_bottom_df["Distance"],
-            y=fresnel_bottom_df["Value"],
+            x=fresnel_distances,
+            y=fresnel60_lower,
             mode="lines",
-            line=dict(shape="linear", color="rgb(150, 180, 0)"),
-            name="First Fresnel Zone (100%)",
+            line=dict(color="rgba(235, 60, 0, 0.5)", width=1),
+            fill="tonexty",
+            fillcolor="rgba(235, 60, 0, 0.15)",
+            showlegend=False,
         )
     )
 
