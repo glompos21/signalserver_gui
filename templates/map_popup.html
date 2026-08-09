@@ -127,7 +127,7 @@
     </div>
     <div id="pixel-value"></div>
     <div id="tools-panel">
-        <button id="btn-find-highest" onclick="findHighestPoint()" title="Find highest elevation point in visible area">&#9650; Find Highest Point</button>
+        <button id="btn-find-highest" onclick="findHighestPoint()" title="Find highest elevation point in visible area">&#9650; Find Highest Points</button>
         <button onclick="clearHighestPoints()" style="background:#999;color:white;border:none;padding:6px 10px;border-radius:4px;cursor:pointer;font-size:12px;margin-left:4px;" title="Clear all markers">Clear</button>
         <button id="btn-use-location" onclick="useLocation()" style="background:#1976D2;color:white;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:12px;margin-left:8px;" title="Send coordinates to station form">&#8678; Use Location</button>
         <span id="highest-info"></span>
@@ -470,17 +470,84 @@
         var highestMarkers = L.layerGroup().addTo(map);
         var highestCount = 0;
 
+        function getSearchBounds() {
+            // Check drawn shapes — use first polygon/rectangle/circle found
+            var layers = drawnItems.getLayers();
+            for (var i = 0; i < layers.length; i++) {
+                var layer = layers[i];
+                if (layer instanceof L.Polygon || layer instanceof L.Rectangle ||
+                    layer instanceof L.Circle) {
+                    return {
+                        bounds: layer.getBounds(),
+                        shape: layer,
+                        label: 'drawn shape'
+                    };
+                }
+            }
+            // Fallback: visible map bounds
+            return {
+                bounds: map.getBounds(),
+                shape: null,
+                label: 'visible area'
+            };
+        }
+
+        function pointInShape(lat, lng, shape) {
+            if (!shape) return true;
+            var point = L.latLng(lat, lng);
+            if (shape instanceof L.Circle) {
+                return point.distanceTo(shape.getLatLng()) <= shape.getRadius();
+            }
+            // Polygon/Rectangle — ray casting
+            if (shape.getBounds && shape.getLatLngs) {
+                var latlngs = shape.getLatLngs()[0];
+                var inside = false;
+                for (var i = 0, j = latlngs.length - 1; i < latlngs.length; j = i++) {
+                    var xi = latlngs[i].lng, yi = latlngs[i].lat;
+                    var xj = latlngs[j].lng, yj = latlngs[j].lat;
+                    var intersect = ((yi > lat) !== (yj > lat)) &&
+                        (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi);
+                    if (intersect) inside = !inside;
+                }
+                return inside;
+            }
+            return true;
+        }
+
         function findHighestPoint() {
             var btn = document.getElementById('btn-find-highest');
             var info = document.getElementById('highest-info');
             btn.disabled = true;
             btn.textContent = 'Searching...';
 
-            var bounds = map.getBounds();
+            var search = getSearchBounds();
+            var bounds = search.bounds;
             var url = '/api/elevation/highest?south=' + bounds.getSouth().toFixed(5) +
                       '&north=' + bounds.getNorth().toFixed(5) +
                       '&west=' + bounds.getWest().toFixed(5) +
                       '&east=' + bounds.getEast().toFixed(5);
+
+            // Send polygon coords for server-side filtering
+            if (search.shape) {
+                var polyCoords;
+                if (search.shape instanceof L.Circle) {
+                    // Approximate circle as 36-point polygon
+                    var center = search.shape.getLatLng();
+                    var radius = search.shape.getRadius();
+                    polyCoords = [];
+                    for (var a = 0; a < 360; a += 10) {
+                        var rad = a * Math.PI / 180;
+                        var dlat = (radius * Math.cos(rad)) / 111320;
+                        var dlng = (radius * Math.sin(rad)) / (111320 * Math.cos(center.lat * Math.PI / 180));
+                        polyCoords.push([center.lat + dlat, center.lng + dlng]);
+                    }
+                } else {
+                    polyCoords = search.shape.getLatLngs()[0].map(function(ll) {
+                        return [ll.lat, ll.lng];
+                    });
+                }
+                url += '&polygon=' + encodeURIComponent(JSON.stringify(polyCoords));
+            }
 
             fetch(url)
                 .then(r => r.json())
@@ -488,41 +555,46 @@
                     if (data.error) {
                         info.textContent = data.error;
                         btn.disabled = false;
-                        btn.textContent = '▲ Find Highest Point';
+                        btn.textContent = '▲ Find Highest Points';
                         return;
                     }
 
-                    var lat = data.lat;
-                    var lng = data.lng;
-                    var elev = data.elevation;
-                    highestCount++;
+                    var points = data.points || [];
+                    var colors = ['#e53935', '#fb8c00', '#fdd835', '#43a047', '#1e88e5'];
+                    var infoLines = [];
 
-                    var m = L.marker([lat, lng], {
-                        icon: L.divIcon({
-                            className: '',
-                            html: '<div style="background:#e53935;color:white;padding:3px 7px;border-radius:4px;font-size:11px;font-weight:bold;white-space:nowrap;border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,0.3);">&#9650; ' + elev + 'm</div>',
-                            iconSize: [80, 26],
-                            iconAnchor: [40, 26]
-                        })
+                    points.forEach(function(pt, idx) {
+                        highestCount++;
+                        var color = colors[idx] || '#757575';
+
+                        var m = L.marker([pt.lat, pt.lng], {
+                            icon: L.divIcon({
+                                className: '',
+                                html: '<div style="background:' + color + ';color:white;padding:3px 7px;border-radius:4px;font-size:11px;font-weight:bold;white-space:nowrap;border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,0.3);">#' + pt.rank + ' ' + pt.elevation + 'm</div>',
+                                iconSize: [90, 26],
+                                iconAnchor: [45, 26]
+                            })
+                        });
+
+                        m.bindPopup(
+                            '<b>#' + pt.rank + '</b> (' + search.label + ')<br>' +
+                            'Elevation: ' + pt.elevation + ' m<br>' +
+                            'Lat: ' + pt.lat.toFixed(5) + '<br>' +
+                            'Lng: ' + pt.lng.toFixed(5)
+                        );
+
+                        highestMarkers.addLayer(m);
+                        infoLines.push('#' + pt.rank + ': <b>' + pt.elevation + 'm</b>');
                     });
 
-                    m.bindPopup(
-                        '<b>Highest Point #' + highestCount + '</b><br>' +
-                        'Elevation: ' + elev + ' m<br>' +
-                        'Lat: ' + lat.toFixed(5) + '<br>' +
-                        'Lng: ' + lng.toFixed(5)
-                    );
-
-                    highestMarkers.addLayer(m);
-
-                    info.innerHTML = '#' + highestCount + ': <b>' + elev + ' m</b> at ' + lat.toFixed(4) + ', ' + lng.toFixed(4);
+                    info.innerHTML = '(' + search.label + ') ' + infoLines.join(' | ');
                     btn.disabled = false;
-                    btn.textContent = '▲ Find Highest Point';
+                    btn.textContent = '▲ Find Highest Points';
                 })
                 .catch(err => {
                     info.textContent = 'Error: ' + err.message;
                     btn.disabled = false;
-                    btn.textContent = '▲ Find Highest Point';
+                    btn.textContent = '▲ Find Highest Points';
                 });
         }
 

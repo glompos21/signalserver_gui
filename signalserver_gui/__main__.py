@@ -187,6 +187,15 @@ def get_highest_point():
         response.status = 400
         return json.dumps({"error": "south, north, west, east params required"})
 
+    # Optional polygon filter: JSON array of [lat, lng] pairs
+    polygon_param = request.params.get("polygon")
+    polygon = None
+    if polygon_param:
+        try:
+            polygon = json.loads(polygon_param)
+        except (json.JSONDecodeError, TypeError):
+            polygon = None
+
     elev_dir = config.get("signalserver", "elevation_data_dir",
                           fallback=os.path.join(config.get("signalservergui", "data_dir", fallback="data"), "elevation"))
 
@@ -195,6 +204,19 @@ def get_highest_point():
         if lon > 0:
             return 360 - lon
         return abs(lon)
+
+    def point_in_polygon(lat, lng, poly):
+        """Ray casting algorithm."""
+        n = len(poly)
+        inside = False
+        j = n - 1
+        for i in range(n):
+            yi, xi = poly[i]
+            yj, xj = poly[j]
+            if ((yi > lat) != (yj > lat)) and (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi):
+                inside = not inside
+            j = i
+        return inside
 
     # Determine which SDF tiles we need
     import math
@@ -205,9 +227,18 @@ def get_highest_point():
     min_lat = int(math.floor(south))
     max_lat = int(math.ceil(north))
 
-    best_elev = -9999
-    best_lat = 0
-    best_lng = 0
+    # Number of top points to return
+    try:
+        count = int(request.params.get("count", 5))
+        count = max(1, min(count, 20))
+    except (TypeError, ValueError):
+        count = 5
+
+    # Minimum distance between returned points (in grid cells) to avoid clustering
+    min_sep_cells = 10
+
+    # Collect all candidate points: (elevation, lat, lng)
+    candidates = []
 
     for lat_tile in range(min_lat, max_lat):
         for lon_tile in range(min_w, max_w):
@@ -251,9 +282,6 @@ def get_highest_point():
                 continue
             grid = data.reshape(resolution, resolution)
 
-            # SDF grid: rows go south to north, cols go west to east
-            # Lat range: header_min_n to header_max_n
-            # Lon range (western): header_min_w to header_max_w
             lat_step = (header_max_n - header_min_n) / resolution
             lon_step = (header_max_w - header_min_w) / resolution
 
@@ -270,28 +298,64 @@ def get_highest_point():
             if sub.size == 0:
                 continue
 
-            max_idx = np.argmax(sub)
-            max_val = sub.flat[max_idx]
+            if polygon:
+                for r in range(sub.shape[0]):
+                    for c in range(sub.shape[1]):
+                        val = int(sub[r, c])
+                        if val <= 0:
+                            continue
+                        pt_lat = header_min_n + (row_start + r) * lat_step
+                        w_lon = header_min_w + (col_start + c) * lon_step
+                        if w_lon > 180:
+                            pt_lng = 360 - w_lon
+                        else:
+                            pt_lng = -w_lon
+                        if point_in_polygon(pt_lat, pt_lng, polygon):
+                            candidates.append((val, pt_lat, pt_lng, row_start + r, col_start + c))
+            else:
+                # Flatten and get top candidates efficiently with numpy
+                flat = sub.flatten()
+                # Get more than needed to allow separation filtering
+                n_candidates = min(len(flat), count * 50)
+                top_indices = np.argpartition(flat, -n_candidates)[-n_candidates:]
+                for idx in top_indices:
+                    val = int(flat[idx])
+                    if val <= 0:
+                        continue
+                    local_row, local_col = np.unravel_index(idx, sub.shape)
+                    pt_lat = header_min_n + (row_start + local_row) * lat_step
+                    w_lon = header_min_w + (col_start + local_col) * lon_step
+                    if w_lon > 180:
+                        pt_lng = 360 - w_lon
+                    else:
+                        pt_lng = -w_lon
+                    candidates.append((val, pt_lat, pt_lng, row_start + local_row, col_start + local_col))
 
-            if max_val > best_elev:
-                best_elev = int(max_val)
-                local_row, local_col = np.unravel_index(max_idx, sub.shape)
-                best_lat = header_min_n + (row_start + local_row) * lat_step
-                # Convert western lon back to standard lon
-                w_lon = header_min_w + (col_start + local_col) * lon_step
-                if w_lon > 180:
-                    best_lng = 360 - w_lon
-                else:
-                    best_lng = -w_lon
-
-    if best_elev <= 0:
+    if not candidates:
         return json.dumps({"error": "No elevation data found for this area"})
 
-    return json.dumps({
-        "elevation": best_elev,
-        "lat": round(best_lat, 5),
-        "lng": round(best_lng, 5)
-    })
+    # Sort descending by elevation
+    candidates.sort(key=lambda x: x[0], reverse=True)
+
+    # Pick top N with minimum separation to avoid clustering
+    results = []
+    for elev, lat, lng, row, col in candidates:
+        too_close = False
+        for _, _, _, prev_row, prev_col in results:
+            if abs(row - prev_row) < min_sep_cells and abs(col - prev_col) < min_sep_cells:
+                too_close = True
+                break
+        if not too_close:
+            results.append((elev, lat, lng, row, col))
+        if len(results) >= count:
+            break
+
+    points = [
+        {"elevation": r[0], "lat": round(r[1], 5), "lng": round(r[2], 5), "rank": i + 1}
+        for i, r in enumerate(results)
+    ]
+
+    return json.dumps({"points": points})
 
 
 @get("/api/elevation/point")

@@ -820,6 +820,52 @@ def make_analysis_plot(
     fig.add_annotation(x=max_dist, y=s2_tip, text=s2_name, showarrow=False,
                        yshift=15, font=dict(size=12, color="rgb(200, 0, 0)"))
 
+    # TX antenna azimuth lobe at station1
+    if item.antenna:
+        az_file = os.path.join("data", "antennas", item.antenna.type,
+                               item.antenna.filename + ".az")
+        if os.path.isfile(az_file):
+            with open(az_file, "r") as f:
+                az_lines = f.readlines()
+            az_data = []
+            for line in az_lines[1:]:
+                parts = line.strip().split("\t")
+                if len(parts) == 2:
+                    az_data.append((int(parts[0]), float(parts[1])))
+
+            if az_data:
+                # Scale lobe to ~8% of graph dimensions
+                lobe_scale_x = max_dist * 0.08
+                lobe_scale_y = (profile_df["Value"].max() - profile_df["Value"].min()) * 0.15
+                lobe_scale = min(lobe_scale_x, lobe_scale_y)
+                if lobe_scale <= 0:
+                    lobe_scale = max_dist * 0.05
+
+                lobe_x = []
+                lobe_y = []
+                for deg, gain in az_data:
+                    rad = math.radians(deg)
+                    # 0 deg = up (north), rotate so pattern radiates rightward
+                    lobe_x.append(lobe_scale * gain * math.cos(math.radians(90 - deg)))
+                    lobe_y.append(s1_tip + lobe_scale * gain * math.sin(math.radians(90 - deg)))
+                # Close the lobe shape
+                if lobe_x:
+                    lobe_x.append(lobe_x[0])
+                    lobe_y.append(lobe_y[0])
+
+                fig.add_trace(
+                    Scatter(
+                        x=lobe_x,
+                        y=lobe_y,
+                        mode="lines",
+                        line=dict(color="rgba(0, 0, 200, 0.6)", width=1.5),
+                        fill="toself",
+                        fillcolor="rgba(0, 0, 200, 0.1)",
+                        name=f"TX Antenna ({item.antenna.name})",
+                        showlegend=True,
+                    )
+                )
+
     fig.update_layout(
         title="Site to Site Analysis",
         xaxis=dict(
